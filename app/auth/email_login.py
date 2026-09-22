@@ -15,6 +15,10 @@ logger = logging.getLogger(__name__)
 
 async def request_email_login(db: AsyncSession, email: str) -> str | None:
     """Create login token and send email. Returns error message or None on success."""
+    settings = get_settings()
+    if not settings.email_login_enabled:
+        return "Email sign-in is disabled. Use Sign in with Google."
+
     email = email.strip().lower()
     if not email or "@" not in email:
         return "Please enter a valid email address."

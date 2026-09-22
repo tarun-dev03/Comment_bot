@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     smtp_from: str = "noreply@example.com"
     smtp_use_tls: bool = True
     email_dev_mode: bool = True
+    email_login_enabled: bool = True
 
     max_messages_per_day: int = 40
 

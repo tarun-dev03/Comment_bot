@@ -95,7 +95,12 @@ async def home(
 async def login_page(request: Request, user: User | None = Depends(get_current_user_optional)):
     if user:
         return RedirectResponse("/", status_code=303)
-    return templates.TemplateResponse(request, "login.html", {"error": None, "sent": False, "user": None})
+    return templates.TemplateResponse(request, "login.html", {
+        "error": None,
+        "sent": False,
+        "user": None,
+        "email_login_enabled": get_settings().email_login_enabled,
+    })
 
 
 @router.post("/auth/email")
@@ -108,12 +113,20 @@ async def auth_email(
     return templates.TemplateResponse(
         request,
         "login.html",
-        {"error": err, "sent": err is None, "email": email, "user": None},
+        {
+            "error": err,
+            "sent": err is None,
+            "email": email,
+            "user": None,
+            "email_login_enabled": get_settings().email_login_enabled,
+        },
     )
 
 
 @router.get("/auth/verify")
 async def auth_verify(token: str, db: AsyncSession = Depends(get_db)):
+    if not get_settings().email_login_enabled:
+        raise HTTPException(status_code=404, detail="Email sign-in is disabled")
     user = await verify_email_login(db, token)
     if not user:
         raise HTTPException(status_code=400, detail="Invalid or expired login link")

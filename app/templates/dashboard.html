@@ -6,7 +6,9 @@
   <h1>Welcome</h1>
   <p>Sign in with Google to comment on a live stream — no email confirmation.</p>
   <a class="btn btn-primary" href="/auth/google/login">Sign in with Google</a>
+  {% if settings.email_login_enabled %}
   <p class="muted" style="margin-top:1rem;"><a href="/login">Use email magic link instead</a></p>
+  {% endif %}
 </section>
 {% else %}
 <section class="card">

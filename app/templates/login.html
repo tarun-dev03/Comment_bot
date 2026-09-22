@@ -3,10 +3,10 @@
 {% block content %}
 <section class="card">
   <h1>Sign in</h1>
-  <p class="muted">Use Google once — no email confirmation. You need the same Google account you use for YouTube.</p>
+  <p class="muted">Use Google — no email confirmation. Same account you use for YouTube.</p>
 
   {% if request.query_params.get('error') %}
-  <p class="error">Google sign-in failed ({{ request.query_params.get('error') }}). Try again or use email below.</p>
+  <p class="error">Google sign-in failed ({{ request.query_params.get('error') }}). Try again.</p>
   {% endif %}
   {% if error %}
   <p class="error">{{ error }}</p>
@@ -16,6 +16,7 @@
 
   <a class="btn btn-primary" href="/auth/google/login" style="display:block;margin:1rem 0;">Sign in with Google</a>
 
+  {% if email_login_enabled %}
   <details class="muted">
     <summary>Sign in with email instead (magic link)</summary>
     <form method="post" action="/auth/email" class="stack" style="margin-top:0.75rem;">
@@ -24,5 +25,6 @@
       <button type="submit" class="btn btn-ghost">Send magic link</button>
     </form>
   </details>
+  {% endif %}
 </section>
 {% endblock %}

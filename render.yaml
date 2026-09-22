@@ -32,6 +32,8 @@ services:
         sync: false
       - key: EMAIL_DEV_MODE
         value: "false"
+      - key: EMAIL_LOGIN_ENABLED
+        value: "false"
       - key: SMTP_HOST
         sync: false
       - key: SMTP_PORT
