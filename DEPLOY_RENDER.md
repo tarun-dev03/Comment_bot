@@ -71,7 +71,9 @@ OAuth consent screen: add your Gmail (and friends) as **Test users** while the a
 
 ## Email login on Render
 
-Set `EMAIL_DEV_MODE=false` and configure SMTP. Magic links use `APP_URL`; they must point to your **Render HTTPS URL**, not localhost.
+Optional if everyone uses **Sign in with Google** (no SMTP required).
+
+For magic-link email login, set `EMAIL_DEV_MODE=false` and configure SMTP. Magic links use `APP_URL`; they must point to your **Render HTTPS URL**, not localhost.
 
 If login emails don’t arrive, check Render **Logs** for SMTP errors and verify `SMTP_FROM` is allowed by your provider.
 

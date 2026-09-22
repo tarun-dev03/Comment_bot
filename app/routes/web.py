@@ -26,7 +26,31 @@ from app.youtube.live_chat import YouTubeAPIError, fetch_live_chat_id, parse_vid
 router = APIRouter()
 templates = Jinja2Templates(directory=str(Path(__file__).resolve().parents[1] / "templates"))
 
-_oauth_states: dict[str, int] = {}
+_oauth_states: dict[str, int | None] = {}  # None = Sign in with Google (no email step)
+
+
+def _google_oauth_configured() -> bool:
+    settings = get_settings()
+    return bool(settings.google_client_id and settings.google_client_secret)
+
+
+def _begin_google_oauth(user_id: int | None) -> RedirectResponse:
+    if not _google_oauth_configured():
+        raise HTTPException(status_code=503, detail="Google OAuth is not configured")
+    state = secrets.token_urlsafe(16)
+    _oauth_states[state] = user_id
+    return RedirectResponse(build_google_authorize_url(state), status_code=303)
+
+
+async def _user_for_google_login(db: AsyncSession, google_email: str) -> User:
+    email = google_email.strip().lower()
+    result = await db.execute(select(User).where(User.email == email))
+    user = result.scalar_one_or_none()
+    if not user:
+        user = User(email=email)
+        db.add(user)
+        await db.flush()
+    return user
 
 
 @router.get("/health")
@@ -105,14 +129,16 @@ async def logout():
     return response
 
 
+@router.get("/auth/google/login")
+async def google_login_start():
+    """One-step sign-in: Google account + YouTube scope (no email magic link)."""
+    return _begin_google_oauth(None)
+
+
 @router.get("/auth/google/start")
 async def google_start(user: User = Depends(get_current_user)):
-    settings = get_settings()
-    if not settings.google_client_id or not settings.google_client_secret:
-        raise HTTPException(status_code=503, detail="Google OAuth is not configured")
-    state = secrets.token_urlsafe(16)
-    _oauth_states[state] = user.id
-    return RedirectResponse(build_google_authorize_url(state), status_code=303)
+    """Reconnect or grant YouTube access for an existing session."""
+    return _begin_google_oauth(user.id)
 
 
 @router.get("/auth/google/callback")
@@ -127,24 +153,40 @@ async def google_callback(
         return RedirectResponse(f"/?error={error}", status_code=303)
     if not code or not state or state not in _oauth_states:
         raise HTTPException(status_code=400, detail="Invalid OAuth callback")
-    user_id = _oauth_states.pop(state)
+    linked_user_id = _oauth_states.pop(state)
 
     try:
         token_data = await exchange_code_for_tokens(code)
     except Exception:
-        return RedirectResponse("/?error=oauth_exchange_failed", status_code=303)
+        return RedirectResponse("/login?error=oauth_exchange_failed", status_code=303)
 
     refresh = token_data.get("refresh_token")
     access = token_data.get("access_token")
     if not refresh:
-        return RedirectResponse("/?error=no_refresh_token", status_code=303)
+        return RedirectResponse("/login?error=no_refresh_token", status_code=303)
 
     google_email = None
     if access:
         google_email = await fetch_google_email(access)
 
+    if linked_user_id is None:
+        if not google_email:
+            return RedirectResponse("/login?error=no_google_email", status_code=303)
+        user = await _user_for_google_login(db, google_email)
+        user_id = user.id
+    else:
+        user_id = linked_user_id
+        result = await db.execute(select(User).where(User.id == user_id))
+        user = result.scalar_one_or_none()
+        if not user:
+            return RedirectResponse("/login?error=session_expired", status_code=303)
+
     await save_oauth_token(db, user_id, refresh, google_email)
-    return RedirectResponse("/", status_code=303)
+
+    response = RedirectResponse("/", status_code=303)
+    if linked_user_id is None:
+        apply_session_cookie(response, user_id)
+    return response
 
 
 class StartBotBody(BaseModel):

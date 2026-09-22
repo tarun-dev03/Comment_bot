@@ -2,19 +2,27 @@
 {% block title %}Sign in — Comment Bot{% endblock %}
 {% block content %}
 <section class="card">
-  <h1>Sign in with email</h1>
-  <p class="muted">We’ll send a one-time link. After that, connect Google to comment on YouTube live chat.</p>
+  <h1>Sign in</h1>
+  <p class="muted">Use Google once — no email confirmation. You need the same Google account you use for YouTube.</p>
+
+  {% if request.query_params.get('error') %}
+  <p class="error">Google sign-in failed ({{ request.query_params.get('error') }}). Try again or use email below.</p>
+  {% endif %}
   {% if error %}
   <p class="error">{{ error }}</p>
   {% elif sent %}
-  <p class="success">If sending worked, check your inbox and <strong>Spam</strong> for the sign-in link.</p>
-  <p class="muted">Use the same email you typed. Link expires in 15 minutes.</p>
-  {% else %}
-  <form method="post" action="/auth/email" class="stack">
-    <label for="email">Email</label>
-    <input id="email" name="email" type="email" required placeholder="you@example.com" value="{{ email or '' }}">
-    <button type="submit" class="btn btn-primary">Send magic link</button>
-  </form>
+  <p class="success">Check your inbox and <strong>Spam</strong> for the sign-in link.</p>
   {% endif %}
+
+  <a class="btn btn-primary" href="/auth/google/login" style="display:block;margin:1rem 0;">Sign in with Google</a>
+
+  <details class="muted">
+    <summary>Sign in with email instead (magic link)</summary>
+    <form method="post" action="/auth/email" class="stack" style="margin-top:0.75rem;">
+      <label for="email">Email</label>
+      <input id="email" name="email" type="email" required placeholder="you@example.com" value="{{ email or '' }}">
+      <button type="submit" class="btn btn-ghost">Send magic link</button>
+    </form>
+  </details>
 </section>
 {% endblock %}

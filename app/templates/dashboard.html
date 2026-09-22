@@ -4,28 +4,31 @@
 {% if not user %}
 <section class="card">
   <h1>Welcome</h1>
-  <p>Sign in to start commenting on a live stream.</p>
-  <a class="btn btn-primary" href="/login">Sign in with email</a>
+  <p>Sign in with Google to comment on a live stream — no email confirmation.</p>
+  <a class="btn btn-primary" href="/auth/google/login">Sign in with Google</a>
+  <p class="muted" style="margin-top:1rem;"><a href="/login">Use email magic link instead</a></p>
 </section>
 {% else %}
 <section class="card">
   <h1>Hello, {{ user.email }}</h1>
-  <p class="muted">Signed in on this device. Share this app URL so others can sign in with their own email and Google account.</p>
+  <p class="muted">Share this app URL so others can sign in with their own Google account.</p>
 </section>
 
+{% if not oauth %}
 <section class="card">
-  <h2>1. Connect YouTube</h2>
-  {% if oauth %}
-  <p class="success">Connected{% if oauth.google_email %} as {{ oauth.google_email }}{% endif %}.</p>
-  <a class="btn btn-ghost" href="/auth/google/start">Reconnect Google</a>
-  {% else %}
-  <p>Comments are sent through your Google/YouTube account.</p>
+  <h2>Connect YouTube</h2>
+  <p>Grant YouTube access to post in live chat.</p>
   <a class="btn btn-primary" href="/auth/google/start">Connect Google</a>
-  {% endif %}
 </section>
+{% else %}
+<section class="card">
+  <p class="success">YouTube connected{% if oauth.google_email %} as {{ oauth.google_email }}{% endif %}.</p>
+  <a class="btn btn-ghost" href="/auth/google/start">Reconnect Google</a>
+</section>
+{% endif %}
 
 <section class="card">
-  <h2>2. Live stream</h2>
+  <h2>{% if oauth %}Live stream{% else %}2. Live stream{% endif %}</h2>
   <form id="start-form" class="stack">
     <label for="stream_url">YouTube live URL</label>
     <input id="stream_url" name="stream_url" type="url" placeholder="https://www.youtube.com/watch?v=..." value="{{ job.stream_url if job else '' }}">
@@ -40,7 +43,7 @@
 </section>
 
 <section class="card">
-  <h2>3. Your phrases (optional)</h2>
+  <h2>{% if oauth %}Your phrases{% else %}3. Your phrases{% endif %} (optional)</h2>
   <p class="muted">Added to the built-in pool; the bot avoids repeating recent messages.</p>
   <form method="post" action="/api/phrases" class="stack">
     <input name="phrase" maxlength="200" placeholder="Add a custom comment..." required>
