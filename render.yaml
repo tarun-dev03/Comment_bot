@@ -13,7 +13,7 @@ services:
     name: comment-bot
     runtime: docker
     plan: free
-    healthCheckPath: /health
+    healthCheckPath: /ready
     autoDeploy: true
     envVars:
       - key: DATABASE_URL

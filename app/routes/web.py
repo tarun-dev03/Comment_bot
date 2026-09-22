@@ -19,7 +19,7 @@ from app.auth.oauth_state import create_oauth_state, pop_oauth_state
 from app.bot.engine import is_bot_running, start_bot_task, stop_bot_task
 from app.config import get_settings
 from app.deps import SESSION_COOKIE, get_current_user, get_current_user_optional
-from app.db import get_db
+from app.db import async_session_factory, get_db
 from app.models import BotJob, BotJobStatus, OAuthToken, User, UserPhrase
 from app.security import apply_session_cookie
 from app.youtube.live_chat import YouTubeAPIError, fetch_live_chat_id, parse_video_id
@@ -75,20 +75,36 @@ async def health():
 async def home(
     request: Request,
     user: User | None = Depends(get_current_user_optional),
-    db: AsyncSession = Depends(get_db),
 ):
+    db_error = getattr(request.app.state, "db_error", None)
+    if db_error:
+        return HTMLResponse(
+            f"""<!DOCTYPE html><html><body style="font-family:sans-serif;padding:2rem;max-width:640px;">
+            <h1>Comment Bot — setup error</h1>
+            <p>Database connection failed. Login cannot work until this is fixed.</p>
+            <pre style="background:#eee;padding:1rem;overflow:auto;">{db_error}</pre>
+            <p><b>Render:</b> Environment → link <code>DATABASE_URL</code> to Postgres
+            <code>comment-bot-db</code> → Save → Manual Deploy.</p>
+            <p>Use the exact URL shown on your Render service page (top of dashboard).</p>
+            </body></html>""",
+            status_code=503,
+        )
+
     oauth = None
     job = None
     phrases: list[str] = []
-    if user:
-        result = await db.execute(select(OAuthToken).where(OAuthToken.user_id == user.id))
-        oauth = result.scalar_one_or_none()
-        result = await db.execute(select(BotJob).where(BotJob.user_id == user.id))
-        job = result.scalar_one_or_none()
-        result = await db.execute(
-            select(UserPhrase.phrase).where(UserPhrase.user_id == user.id).order_by(UserPhrase.id.desc())
-        )
-        phrases = [row[0] for row in result.all()]
+    async with async_session_factory() as db:
+        if user:
+            result = await db.execute(select(OAuthToken).where(OAuthToken.user_id == user.id))
+            oauth = result.scalar_one_or_none()
+            result = await db.execute(select(BotJob).where(BotJob.user_id == user.id))
+            job = result.scalar_one_or_none()
+            result = await db.execute(
+                select(UserPhrase.phrase)
+                .where(UserPhrase.user_id == user.id)
+                .order_by(UserPhrase.id.desc())
+            )
+            phrases = [row[0] for row in result.all()]
 
     return templates.TemplateResponse(
         request,

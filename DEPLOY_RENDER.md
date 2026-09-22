@@ -81,7 +81,9 @@ If login emails don’t arrive, check Render **Logs** for SMTP errors and verify
 
 ## Using the app from any network
 
-1. Open `https://your-service.onrender.com` on phone or laptop.
+1. In Render, open **comment-bot** and copy the **exact** URL at the top (e.g. `https://comment-bot.onrender.com` or `https://comment-bot-xxxx.onrender.com`). **Do not guess** — if the URL 404s in the browser, Google OAuth will fail too.
+2. Set **`APP_URL`** in Environment to that exact URL (no trailing `/`).
+3. Open that URL on phone or laptop.
 2. Sign in with email → open link from inbox.
 3. **Connect Google** → paste **live** stream URL → **Start**.
 4. **Stop** when done.
