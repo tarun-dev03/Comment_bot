@@ -47,6 +47,20 @@ def create_session_cookie(user_id: int) -> str:
     return session_serializer().dumps({"user_id": user_id})
 
 
+def apply_session_cookie(response, user_id: int) -> None:
+    from app.config import get_settings
+
+    settings = get_settings()
+    response.set_cookie(
+        "session",
+        create_session_cookie(user_id),
+        httponly=True,
+        samesite="lax",
+        secure=settings.use_secure_cookies(),
+        max_age=60 * 60 * 24 * 30,
+    )
+
+
 def load_session_cookie(cookie: str, max_age_seconds: int = 60 * 60 * 24 * 30) -> int | None:
     try:
         data = session_serializer().loads(cookie, max_age=max_age_seconds)

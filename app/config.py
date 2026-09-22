@@ -1,5 +1,6 @@
 from functools import lru_cache
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -29,6 +30,24 @@ class Settings(BaseSettings):
         "email",
         "https://www.googleapis.com/auth/youtube.force-ssl",
     ]
+
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def normalize_database_url(cls, v: object) -> object:
+        if not isinstance(v, str):
+            return v
+        if v.startswith("postgres://"):
+            return "postgresql+asyncpg://" + v[len("postgres://") :]
+        if (
+            v.startswith("postgresql://")
+            and "+asyncpg" not in v
+            and "+psycopg" not in v
+        ):
+            return "postgresql+asyncpg://" + v[len("postgresql://") :]
+        return v
+
+    def use_secure_cookies(self) -> bool:
+        return self.app_url.lower().startswith("https://")
 
 
 @lru_cache

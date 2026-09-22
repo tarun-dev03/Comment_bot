@@ -68,6 +68,8 @@ docker run -p 8000:8000 --env-file .env comment-bot
 
 Deploy the image to Render, Railway, Fly.io, etc. Set all env vars and use a persistent volume or Postgres for `DATABASE_URL`.
 
+**Render (recommended for HTTPS + any network):** step-by-step in [DEPLOY_RENDER.md](DEPLOY_RENDER.md). Use the included [`render.yaml`](render.yaml) Blueprint (Docker + Postgres).
+
 ## Usage flow
 
 1. **Sign in with email** → click magic link.

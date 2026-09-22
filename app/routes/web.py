@@ -20,13 +20,18 @@ from app.config import get_settings
 from app.deps import SESSION_COOKIE, get_current_user, get_current_user_optional
 from app.db import get_db
 from app.models import BotJob, BotJobStatus, OAuthToken, User, UserPhrase
-from app.security import create_session_cookie
+from app.security import apply_session_cookie
 from app.youtube.live_chat import YouTubeAPIError, fetch_live_chat_id, parse_video_id
 
 router = APIRouter()
 templates = Jinja2Templates(directory=str(Path(__file__).resolve().parents[1] / "templates"))
 
 _oauth_states: dict[str, int] = {}
+
+
+@router.get("/health")
+async def health():
+    return {"ok": True}
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -89,13 +94,7 @@ async def auth_verify(token: str, db: AsyncSession = Depends(get_db)):
     if not user:
         raise HTTPException(status_code=400, detail="Invalid or expired login link")
     response = RedirectResponse("/", status_code=303)
-    response.set_cookie(
-        SESSION_COOKIE,
-        create_session_cookie(user.id),
-        httponly=True,
-        samesite="lax",
-        max_age=60 * 60 * 24 * 30,
-    )
+    apply_session_cookie(response, user.id)
     return response
 
 
