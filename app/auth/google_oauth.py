@@ -16,15 +16,16 @@ GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo"
 
 
-def google_redirect_uri() -> str:
-    return f"{get_settings().app_url.rstrip('/')}/auth/google/callback"
+def google_redirect_uri(app_url: str | None = None) -> str:
+    base = (app_url or get_settings().app_url).rstrip("/")
+    return f"{base}/auth/google/callback"
 
 
-def build_google_authorize_url(state: str) -> str:
+def build_google_authorize_url(state: str, redirect_uri: str) -> str:
     settings = get_settings()
     params = {
         "client_id": settings.google_client_id,
-        "redirect_uri": google_redirect_uri(),
+        "redirect_uri": redirect_uri,
         "response_type": "code",
         "scope": " ".join(settings.google_scopes),
         "access_type": "offline",
@@ -34,7 +35,7 @@ def build_google_authorize_url(state: str) -> str:
     return f"{GOOGLE_AUTH_URL}?{urlencode(params)}"
 
 
-async def exchange_code_for_tokens(code: str) -> dict:
+async def exchange_code_for_tokens(code: str, redirect_uri: str) -> dict:
     settings = get_settings()
     async with httpx.AsyncClient() as client:
         resp = await client.post(
@@ -43,7 +44,7 @@ async def exchange_code_for_tokens(code: str) -> dict:
                 "code": code,
                 "client_id": settings.google_client_id,
                 "client_secret": settings.google_client_secret,
-                "redirect_uri": google_redirect_uri(),
+                "redirect_uri": redirect_uri,
                 "grant_type": "authorization_code",
             },
             headers={"Content-Type": "application/x-www-form-urlencoded"},

@@ -36,6 +36,16 @@ class EmailLoginToken(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class OAuthLoginState(Base):
+    __tablename__ = "oauth_login_states"
+
+    state: Mapped[str] = mapped_column(String(64), primary_key=True)
+    redirect_uri: Mapped[str] = mapped_column(String(512), nullable=False)
+    user_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class OAuthToken(Base):
     __tablename__ = "oauth_tokens"
 

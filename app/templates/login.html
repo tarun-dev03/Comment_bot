@@ -6,7 +6,15 @@
   <p class="muted">Use Google — no email confirmation. Same account you use for YouTube.</p>
 
   {% if request.query_params.get('error') %}
-  <p class="error">Google sign-in failed ({{ request.query_params.get('error') }}). Try again.</p>
+  <p class="error">
+    Google sign-in failed ({{ request.query_params.get('error') }}).
+    {% if request.query_params.get('error') == 'invalid_state' %}
+    Start again from this page — do not bookmark the Google callback URL.
+    {% elif request.query_params.get('error') == 'oauth_exchange_failed' %}
+    Check that Google Cloud redirect URI includes:
+    <code>{{ request.url.scheme }}://{{ request.headers.get('host') }}/auth/google/callback</code>
+    {% endif %}
+  </p>
   {% endif %}
   {% if error %}
   <p class="error">{{ error }}</p>

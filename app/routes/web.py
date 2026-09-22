@@ -15,6 +15,7 @@ from app.auth.google_oauth import (
     fetch_google_email,
     save_oauth_token,
 )
+from app.auth.oauth_state import create_oauth_state, pop_oauth_state
 from app.bot.engine import is_bot_running, start_bot_task, stop_bot_task
 from app.config import get_settings
 from app.deps import SESSION_COOKIE, get_current_user, get_current_user_optional
@@ -26,7 +27,14 @@ from app.youtube.live_chat import YouTubeAPIError, fetch_live_chat_id, parse_vid
 router = APIRouter()
 templates = Jinja2Templates(directory=str(Path(__file__).resolve().parents[1] / "templates"))
 
-_oauth_states: dict[str, int | None] = {}  # None = Sign in with Google (no email step)
+
+def _public_base_url(request: Request) -> str:
+    """Use the URL the user actually opened (fixes wrong APP_URL → Google 404)."""
+    forwarded = request.headers.get("x-forwarded-proto")
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host")
+    if forwarded and host:
+        return f"{forwarded}://{host}".rstrip("/")
+    return str(request.base_url).rstrip("/")
 
 
 def _google_oauth_configured() -> bool:
@@ -34,12 +42,17 @@ def _google_oauth_configured() -> bool:
     return bool(settings.google_client_id and settings.google_client_secret)
 
 
-def _begin_google_oauth(user_id: int | None) -> RedirectResponse:
+async def _begin_google_oauth(
+    request: Request,
+    db: AsyncSession,
+    user_id: int | None,
+) -> RedirectResponse:
     if not _google_oauth_configured():
         raise HTTPException(status_code=503, detail="Google OAuth is not configured")
     state = secrets.token_urlsafe(16)
-    _oauth_states[state] = user_id
-    return RedirectResponse(build_google_authorize_url(state), status_code=303)
+    redirect_uri = f"{_public_base_url(request)}/auth/google/callback"
+    await create_oauth_state(db, state=state, redirect_uri=redirect_uri, user_id=user_id)
+    return RedirectResponse(build_google_authorize_url(state, redirect_uri), status_code=303)
 
 
 async def _user_for_google_login(db: AsyncSession, google_email: str) -> User:
@@ -143,15 +156,19 @@ async def logout():
 
 
 @router.get("/auth/google/login")
-async def google_login_start():
+async def google_login_start(request: Request, db: AsyncSession = Depends(get_db)):
     """One-step sign-in: Google account + YouTube scope (no email magic link)."""
-    return _begin_google_oauth(None)
+    return await _begin_google_oauth(request, db, None)
 
 
 @router.get("/auth/google/start")
-async def google_start(user: User = Depends(get_current_user)):
+async def google_start(
+    request: Request,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     """Reconnect or grant YouTube access for an existing session."""
-    return _begin_google_oauth(user.id)
+    return await _begin_google_oauth(request, db, user.id)
 
 
 @router.get("/auth/google/callback")
@@ -163,13 +180,22 @@ async def google_callback(
     db: AsyncSession = Depends(get_db),
 ):
     if error:
-        return RedirectResponse(f"/?error={error}", status_code=303)
-    if not code or not state or state not in _oauth_states:
-        raise HTTPException(status_code=400, detail="Invalid OAuth callback")
-    linked_user_id = _oauth_states.pop(state)
+        return RedirectResponse(f"/login?error={error}", status_code=303)
+    if not code or not state:
+        return RedirectResponse("/login?error=missing_code", status_code=303)
+
+    pending = await pop_oauth_state(db, state)
+    if not pending:
+        return RedirectResponse(
+            "/login?error=invalid_state",
+            status_code=303,
+        )
+
+    linked_user_id = pending.user_id
+    redirect_uri = pending.redirect_uri
 
     try:
-        token_data = await exchange_code_for_tokens(code)
+        token_data = await exchange_code_for_tokens(code, redirect_uri)
     except Exception:
         return RedirectResponse("/login?error=oauth_exchange_failed", status_code=303)
 
@@ -196,7 +222,8 @@ async def google_callback(
 
     await save_oauth_token(db, user_id, refresh, google_email)
 
-    response = RedirectResponse("/", status_code=303)
+    home = f"{_public_base_url(request)}/"
+    response = RedirectResponse(home, status_code=303)
     if linked_user_id is None:
         apply_session_cookie(response, user_id)
     return response
