@@ -1,0 +1,10 @@
+<dl class="status-dl">
+  <dt>Status</dt>
+  <dd>{% if running %}Running{% elif job %}{{ job.status }}{% else %}stopped{% endif %}</dd>
+  <dt>Messages sent</dt>
+  <dd>{% if job %}{{ job.messages_sent }}{% else %}0{% endif %}</dd>
+  {% if job and job.last_error %}
+  <dt class="error">Error</dt>
+  <dd class="error">{{ job.last_error }}</dd>
+  {% endif %}
+</dl>

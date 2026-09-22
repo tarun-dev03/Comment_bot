@@ -1,0 +1,47 @@
+{
+  "fixed_phrases": [
+    "Great energy in here today",
+    "This stream is really fun",
+    "Love the vibe right now",
+    "Chat moving fast today",
+    "Hello from the live chat",
+    "Thanks for streaming",
+    "This is entertaining",
+    "Nice stream so far",
+    "Good to be here live",
+    "Watching from my phone",
+    "Audio sounds clear today",
+    "Video quality looks good",
+    "That was a cool moment",
+    "Interesting topic today",
+    "Learning something new",
+    "Appreciate the effort",
+    "Keep it up streamer",
+    "Chat is lively tonight",
+    "Happy to catch this live",
+    "This made my day better"
+  ],
+  "templates": [
+    "That {adj} moment was {emoji}",
+    "Really {adj} stream today {emoji}",
+    "Chat feels {adj} right now",
+    "This part is so {adj} {emoji}",
+    "{emoji} loving this {noun}",
+    "What a {adj} {noun} that was",
+    "Still here and it's {adj}",
+    "Random {noun} appreciation {emoji}",
+    "Vibes are {adj} in chat",
+    "Unexpectedly {adj} today {emoji}"
+  ],
+  "word_banks": {
+    "adj": [
+      "fun", "cool", "nice", "wild", "chill", "great", "solid", "neat", "fresh", "bright",
+      "cozy", "lively", "smooth", "sharp", "calm", "bold", "warm", "quirky", "epic", "mild"
+    ],
+    "noun": [
+      "stream", "segment", "chat", "energy", "topic", "beat", "take", "clip", "run", "show",
+      "vibe", "moment", "thread", "scene", "bit", "intro", "break", "chat", "loop", "set"
+    ],
+    "emoji": ["", " :)", " ^_^", " ✨", " 👍", " 🔥", " 💯", " 😄", " 🎉", " ⭐"]
+  }
+}

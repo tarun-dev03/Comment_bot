@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — Comment Bot{% endblock %}
+{% block content %}
+{% if not user %}
+<section class="card">
+  <h1>Welcome</h1>
+  <p>Sign in to start commenting on a live stream.</p>
+  <a class="btn btn-primary" href="/login">Sign in with email</a>
+</section>
+{% else %}
+<section class="card">
+  <h1>Hello, {{ user.email }}</h1>
+  <p class="muted">Signed in on this device. Share this app URL so others can sign in with their own email and Google account.</p>
+</section>
+
+<section class="card">
+  <h2>1. Connect YouTube</h2>
+  {% if oauth %}
+  <p class="success">Connected{% if oauth.google_email %} as {{ oauth.google_email }}{% endif %}.</p>
+  <a class="btn btn-ghost" href="/auth/google/start">Reconnect Google</a>
+  {% else %}
+  <p>Comments are sent through your Google/YouTube account.</p>
+  <a class="btn btn-primary" href="/auth/google/start">Connect Google</a>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2>2. Live stream</h2>
+  <form id="start-form" class="stack">
+    <label for="stream_url">YouTube live URL</label>
+    <input id="stream_url" name="stream_url" type="url" placeholder="https://www.youtube.com/watch?v=..." value="{{ job.stream_url if job else '' }}">
+    <div class="row">
+      <button type="button" id="btn-start" class="btn btn-primary">Start bot</button>
+      <button type="button" id="btn-stop" class="btn btn-danger">Stop</button>
+    </div>
+  </form>
+  <div id="bot-status" class="status-panel" hx-get="/api/bots/status" hx-trigger="load, every 3s" hx-swap="innerHTML">
+    {% include "partials/status.html" %}
+  </div>
+</section>
+
+<section class="card">
+  <h2>3. Your phrases (optional)</h2>
+  <p class="muted">Added to the built-in pool; the bot avoids repeating recent messages.</p>
+  <form method="post" action="/api/phrases" class="stack">
+    <input name="phrase" maxlength="200" placeholder="Add a custom comment..." required>
+    <button type="submit" class="btn btn-ghost">Add phrase</button>
+  </form>
+  {% if phrases %}
+  <ul class="phrase-list">
+    {% for p in phrases %}
+    <li>{{ p }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</section>
+
+<script>
+const statusEl = document.getElementById('bot-status');
+async function refreshStatus() {
+  const r = await fetch('/api/bots/status');
+  if (!r.ok) return;
+  const data = await r.json();
+  statusEl.innerHTML = formatStatus(data);
+}
+function formatStatus(data) {
+  let html = '<dl class="status-dl">';
+  html += '<dt>Status</dt><dd>' + (data.running ? 'Running' : data.status) + '</dd>';
+  html += '<dt>Messages sent</dt><dd>' + (data.messages_sent || 0) + '</dd>';
+  html += '<dt>Today</dt><dd>' + (data.messages_sent_today || 0) + ' / {{ settings.max_messages_per_day }}</dd>';
+  if (data.last_error) html += '<dt class="error">Error</dt><dd class="error">' + escapeHtml(data.last_error) + '</dd>';
+  html += '</dl>';
+  return html;
+}
+function escapeHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+document.getElementById('btn-start').addEventListener('click', async () => {
+  const url = document.getElementById('stream_url').value;
+  const r = await fetch('/api/bots/start', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({stream_url: url})
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) alert(data.detail || 'Failed to start');
+  else refreshStatus();
+});
+document.getElementById('btn-stop').addEventListener('click', async () => {
+  await fetch('/api/bots/stop', {method: 'POST'});
+  refreshStatus();
+});
+refreshStatus();
+setInterval(refreshStatus, 3000);
+</script>
+{% endif %}
+{% endblock %}
