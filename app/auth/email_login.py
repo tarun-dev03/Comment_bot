@@ -31,33 +31,87 @@ async def request_email_login(db: AsyncSession, email: str) -> str | None:
     settings = get_settings()
     verify_url = f"{settings.app_url.rstrip('/')}/auth/verify?token={raw_token}"
 
-    if settings.email_dev_mode or not settings.smtp_host:
+    smtp_host = (settings.smtp_host or "").strip()
+    if settings.email_dev_mode or not smtp_host:
         logger.info("DEV login link for %s: %s", email, verify_url)
         print(f"\n[DEV] Login link for {email}:\n{verify_url}\n")
         return None
 
     msg = EmailMessage()
-    msg["From"] = settings.smtp_from
+    smtp_from = (settings.smtp_from or settings.smtp_user or "").strip()
+    msg["From"] = smtp_from
     msg["To"] = email
     msg["Subject"] = "Sign in to YouTube Comment Bot"
     msg.set_content(
         f"Click the link below to sign in (expires in 15 minutes):\n\n{verify_url}\n"
     )
 
+    username = (settings.smtp_user or "").strip()
+    password = (settings.smtp_password or "").replace(" ", "")
+
     try:
-        await aiosmtplib.send(
+        await _send_smtp(
             msg,
-            hostname=settings.smtp_host,
+            hostname=smtp_host,
             port=settings.smtp_port,
-            username=settings.smtp_user or None,
-            password=settings.smtp_password or None,
-            start_tls=settings.smtp_use_tls,
+            username=username,
+            password=password,
+            use_tls=settings.smtp_use_tls,
         )
+        logger.info("Login email sent to %s via %s", email, smtp_host)
     except Exception as e:
-        logger.exception("Failed to send login email")
+        logger.exception("Failed to send login email to %s", email)
         return f"Could not send email: {e}"
 
     return None
+
+
+async def _send_smtp(
+    msg: EmailMessage,
+    *,
+    hostname: str,
+    port: int,
+    username: str,
+    password: str,
+    use_tls: bool,
+) -> None:
+    """Send via STARTTLS (587) or implicit TLS (465)."""
+    if port == 465:
+        await aiosmtplib.send(
+            msg,
+            hostname=hostname,
+            port=465,
+            use_tls=True,
+            username=username or None,
+            password=password or None,
+            timeout=30,
+        )
+        return
+
+    try:
+        await aiosmtplib.send(
+            msg,
+            hostname=hostname,
+            port=port or 587,
+            start_tls=True,
+            username=username or None,
+            password=password or None,
+            timeout=30,
+        )
+    except Exception:
+        if hostname == "smtp.gmail.com" and port != 465:
+            logger.warning("SMTP on port %s failed; retrying Gmail on 465", port)
+            await aiosmtplib.send(
+                msg,
+                hostname=hostname,
+                port=465,
+                use_tls=True,
+                username=username or None,
+                password=password or None,
+                timeout=30,
+            )
+        else:
+            raise
 
 
 async def verify_email_login(db: AsyncSession, raw_token: str) -> User | None:

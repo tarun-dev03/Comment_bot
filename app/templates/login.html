@@ -6,9 +6,9 @@
   <p class="muted">We’ll send a one-time link. After that, connect Google to comment on YouTube live chat.</p>
   {% if error %}
   <p class="error">{{ error }}</p>
-  {% endif %}
-  {% if sent %}
-  <p class="success">Check your email for the sign-in link. (In dev mode, see the server console.)</p>
+  {% elif sent %}
+  <p class="success">If sending worked, check your inbox and <strong>Spam</strong> for the sign-in link.</p>
+  <p class="muted">Use the same email you typed. Link expires in 15 minutes.</p>
   {% else %}
   <form method="post" action="/auth/email" class="stack">
     <label for="email">Email</label>
