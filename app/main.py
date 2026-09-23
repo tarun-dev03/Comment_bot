@@ -31,11 +31,7 @@ app.include_router(web.router)
 async def ready(request: Request):
     err = getattr(request.app.state, "db_error", None)
     if err:
-        return HTMLResponse(
-            f"<h1>Database not ready</h1><p>{err}</p>"
-            "<p>On Render: link Postgres DATABASE_URL to this service and redeploy.</p>",
-            status_code=503,
-        )
+        return {"ok": False, "db": False, "error": err}
     return {"ok": True, "db": True}
 
 
