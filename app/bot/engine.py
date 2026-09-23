@@ -53,15 +53,6 @@ async def _bot_loop(user_id: int) -> None:
                     job.quota_day = today
                     job.messages_sent_today = 0
 
-                if settings.max_messages_per_day > 0 and job.messages_sent_today >= settings.max_messages_per_day:
-                    job.status = BotJobStatus.ERROR.value
-                    job.last_error = (
-                        f"Daily app limit reached ({settings.max_messages_per_day} messages). "
-                        "Adjust MAX_MESSAGES_PER_DAY or request YouTube quota increase."
-                    )
-                    await db.commit()
-                    break
-
                 access = await get_access_token_for_user(db, user_id)
                 if not access:
                     job.status = BotJobStatus.ERROR.value

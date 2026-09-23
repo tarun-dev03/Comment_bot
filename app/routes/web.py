@@ -282,6 +282,7 @@ async def api_start_bot(
         job.live_chat_id = live_chat_id
         job.status = BotJobStatus.RUNNING.value
         job.last_error = None
+        job.messages_sent_today = 0
     else:
         job = BotJob(
             user_id=user.id,
@@ -289,6 +290,8 @@ async def api_start_bot(
             video_id=video_id,
             live_chat_id=live_chat_id,
             status=BotJobStatus.RUNNING.value,
+            last_error=None,
+            messages_sent_today=0,
         )
         db.add(job)
     await db.commit()

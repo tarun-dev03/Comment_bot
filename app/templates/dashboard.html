@@ -72,7 +72,7 @@ function formatStatus(data) {
   let html = '<dl class="status-dl">';
   html += '<dt>Status</dt><dd>' + (data.running ? 'Running' : data.status) + '</dd>';
   html += '<dt>Messages sent</dt><dd>' + (data.messages_sent || 0) + '</dd>';
-  html += '<dt>Today</dt><dd>' + (data.messages_sent_today || 0) + ({% if settings.max_messages_per_day > 0 %}' / {{ settings.max_messages_per_day }}'{% else %}' (Unlimited)'{% endif %}) + '</dd>';
+  html += '<dt>Today</dt><dd>' + (data.messages_sent_today || 0) + ' (Unlimited)</dd>';
   if (data.last_error) html += '<dt class="error">Error</dt><dd class="error">' + escapeHtml(data.last_error) + '</dd>';
   html += '</dl>';
   return html;
