@@ -37,15 +37,20 @@ class Settings(BaseSettings):
     def normalize_database_url(cls, v: object) -> object:
         if not isinstance(v, str):
             return v
-        if v.startswith("postgres://"):
-            return "postgresql+asyncpg://" + v[len("postgres://") :]
-        if (
-            v.startswith("postgresql://")
-            and "+asyncpg" not in v
-            and "+psycopg" not in v
-        ):
-            return "postgresql+asyncpg://" + v[len("postgresql://") :]
-        return v
+        url = v
+        if url.startswith("postgres://"):
+            url = "postgresql+asyncpg://" + url[len("postgres://") :]
+        elif url.startswith("postgresql://") and "+asyncpg" not in url and "+psycopg" not in url:
+            url = "postgresql+asyncpg://" + url[len("postgresql://") :]
+        # Strip libpq / DSN ssl query params so asyncpg relies on connect_args
+        from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
+
+        parsed = urlparse(url)
+        if parsed.query:
+            ssl_keys = {"ssl", "sslmode", "sslcert", "sslkey", "sslrootcert", "sslcrl", "sslpassword"}
+            qs = [(k, val) for k, val in parse_qsl(parsed.query, keep_blank_values=True) if k.lower() not in ssl_keys]
+            url = urlunparse(parsed._replace(query=urlencode(qs)))
+        return url
 
     def use_secure_cookies(self) -> bool:
         return self.app_url.lower().startswith("https://")

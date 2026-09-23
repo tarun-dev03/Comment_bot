@@ -23,3 +23,18 @@ def test_message_generator_no_immediate_repeat():
         msg = gen.next_message()
         assert msg != prev
         prev = msg
+
+
+def test_normalize_database_url_strips_ssl_params():
+    from app.config import Settings
+    from app.db import _postgres_connect_args
+
+    raw_url = "postgres://user:pass@host:5432/dbname?ssl=true&sslmode=require"
+    s = Settings(database_url=raw_url)
+    assert s.database_url == "postgresql+asyncpg://user:pass@host:5432/dbname"
+    
+    args = _postgres_connect_args(s.database_url)
+    assert "ssl" in args
+    assert args["ssl"].check_hostname is False
+    assert args["ssl"].verify_mode == 0
+

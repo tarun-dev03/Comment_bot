@@ -1,7 +1,6 @@
 import logging
 import ssl
 from collections.abc import AsyncGenerator
-from urllib.parse import parse_qs, urlparse
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
@@ -16,22 +15,21 @@ class Base(DeclarativeBase):
 
 
 def _postgres_connect_args(database_url: str) -> dict:
+    """Render Postgres uses TLS with a self-signed cert; do not verify it."""
     if not database_url.startswith("postgresql"):
         return {}
-    parsed = urlparse(database_url)
-    qs = parse_qs(parsed.query)
-    if qs.get("sslmode", [""])[0] == "disable":
-        return {}
-    return {"ssl": ssl.create_default_context()}
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    return {"ssl": ctx}
 
 
 settings = get_settings()
 _connect_args = _postgres_connect_args(settings.database_url)
-engine = create_async_engine(
-    settings.database_url,
-    echo=False,
-    connect_args=_connect_args or None,
-)
+_engine_kwargs: dict = {"echo": False}
+if _connect_args:
+    _engine_kwargs["connect_args"] = _connect_args
+engine = create_async_engine(settings.database_url, **_engine_kwargs)
 async_session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 
