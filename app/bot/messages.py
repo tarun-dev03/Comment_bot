@@ -6,27 +6,57 @@ from pathlib import Path
 
 DATA_PATH = Path(__file__).resolve().parents[2] / "data" / "comment_templates.json"
 
+EMOJIS = ["", " 🔥", " ✨", " 👍", " 💯", " ❤️", " 🙌", " 😊", " 🚀", " 👏", " ⭐", " 😄", " 🎉"]
+PUNCTUATIONS = ["", "!", ".", "!!", "...", "~"]
+PREFIXES = ["", "", "", "hey, ", "wow, ", "yoo, ", "so ", "lol "]
+
 
 class MessageGenerator:
-    """Non-repetitive messages via shuffled fixed phrases + templated slots."""
+    """Generates unique, highly randomized live chat comments prioritized from user-added phrases."""
 
     def __init__(self, custom_phrases: list[str] | None = None):
         with open(DATA_PATH, encoding="utf-8") as f:
             data = json.load(f)
 
-        self.fixed: list[str] = list(data.get("fixed_phrases", []))
+        self.default_fixed: list[str] = list(data.get("fixed_phrases", []))
         self.templates: list[str] = list(data.get("templates", []))
         self.word_banks: dict[str, list[str]] = data.get("word_banks", {})
 
+        self.custom_phrases: list[str] = []
         if custom_phrases:
-            self.fixed.extend(p.strip() for p in custom_phrases if p.strip())
+            self.update_custom_phrases(custom_phrases)
 
-        self._fixed_queue: list[str] = []
-        self._recent: deque[str] = deque(maxlen=min(50, max(10, len(self.fixed) + len(self.templates))))
+        self._recent_set: set[str] = set()
+        self._recent_deque: deque[str] = deque(maxlen=2000)
 
-    def _refill_fixed_queue(self) -> None:
-        self._fixed_queue = self.fixed.copy()
-        random.shuffle(self._fixed_queue)
+    def update_custom_phrases(self, custom_phrases: list[str]) -> None:
+        cleaned = [p.strip() for p in custom_phrases if p.strip()]
+        self.custom_phrases = cleaned
+
+    def _variate(self, text: str) -> str:
+        """Add subtle random variations (prefix, punctuation, emoji) to ensure uniqueness and randomness."""
+        res = text.strip()
+
+        # Optionally add a soft prefix (20% chance)
+        if random.random() < 0.20:
+            prefix = random.choice([p for p in PREFIXES if p])
+            if len(res) > 1:
+                res = prefix + res[0].lower() + res[1:]
+            else:
+                res = prefix + res
+
+        # Strip existing trailing punctuation and apply random punctuation (50% chance)
+        if random.random() < 0.50:
+            punc = random.choice(PUNCTUATIONS)
+            if punc:
+                res = res.rstrip(".!~") + punc
+
+        # Optionally add a random emoji (45% chance)
+        if random.random() < 0.45:
+            emoji = random.choice([e for e in EMOJIS if e])
+            res += emoji
+
+        return res.strip()
 
     def _from_template(self) -> str:
         tpl = random.choice(self.templates)
@@ -38,37 +68,42 @@ class MessageGenerator:
             tpl = tpl.split("{")[0].strip()
         now = datetime.now(UTC)
         tpl = tpl.replace("{time}", now.strftime("%H:%M"))
-        return tpl.strip()[:200]
+        return tpl.strip()
 
-    def _accept(self, text: str) -> bool:
-        t = text.strip().lower()
-        if not t:
-            return False
-        return t not in self._recent
+    def _register(self, text: str) -> str:
+        cleaned = text.strip()[:200]
+        normalized = cleaned.lower()
+        self._recent_set.add(normalized)
+        self._recent_deque.append(normalized)
+        if len(self._recent_set) > 2000:
+            self._recent_set = set(self._recent_deque)
+        return cleaned
+
+    def is_seen(self, text: str) -> bool:
+        return text.strip().lower() in self._recent_set
 
     def next_message(self) -> str:
-        for _ in range(40):
-            if random.random() < 0.45 and self.fixed:
-                if not self._fixed_queue:
-                    self._refill_fixed_queue()
-                candidate = self._fixed_queue.pop()
-            elif self.templates:
-                candidate = self._from_template()
-            elif self.fixed:
-                if not self._fixed_queue:
-                    self._refill_fixed_queue()
-                candidate = self._fixed_queue.pop()
+        # Try up to 50 randomized candidates to guarantee uniqueness
+        for _ in range(50):
+            # Prioritize custom (added) phrases if available (75% chance)
+            if self.custom_phrases and random.random() < 0.75:
+                base = random.choice(self.custom_phrases)
+                candidate = self._variate(base)
+            elif random.random() < 0.5 and self.templates:
+                candidate = self._variate(self._from_template())
+            elif self.custom_phrases or self.default_fixed:
+                pool = self.custom_phrases + self.default_fixed
+                base = random.choice(pool)
+                candidate = self._variate(base)
             else:
-                candidate = "Hello live chat"
+                candidate = self._variate("Great live stream")
 
-            candidate = candidate.strip()[:200]
-            if self._accept(candidate):
-                self._recent.append(candidate.lower())
-                return candidate
+            if not self.is_seen(candidate):
+                return self._register(candidate)
 
-        # Fallback: append random suffix to force uniqueness
-        base = random.choice(self.fixed) if self.fixed else "Hello live chat"
-        suffix = random.randint(1000, 9999)
-        msg = f"{base} #{suffix}"[:200]
-        self._recent.append(msg.lower())
-        return msg
+        # Guaranteed unique fallback if all candidates were previously seen
+        base_pool = self.custom_phrases if self.custom_phrases else self.default_fixed
+        base = random.choice(base_pool) if base_pool else "Great stream"
+        suffix_tag = random.randint(100, 9999)
+        return self._register(f"{base} #{suffix_tag}")
+

@@ -63,6 +63,8 @@ async def _bot_loop(user_id: int) -> None:
                 phrases = await _load_custom_phrases(db, user_id)
                 if user_id not in _generators:
                     _generators[user_id] = MessageGenerator(custom_phrases=phrases)
+                else:
+                    _generators[user_id].update_custom_phrases(phrases)
                 generator = _generators[user_id]
                 text = generator.next_message()
 
