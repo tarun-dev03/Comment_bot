@@ -82,7 +82,7 @@ async def _bot_loop(user_id: int) -> None:
                 job.last_error = None
                 await db.commit()
 
-            delay = random.uniform(1, 10)
+            delay = random.uniform(10, 20)
             try:
                 await asyncio.wait_for(stop_event.wait(), timeout=delay)
                 break
