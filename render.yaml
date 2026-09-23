@@ -48,4 +48,4 @@ services:
       - key: SMTP_USE_TLS
         value: "true"
       - key: MAX_MESSAGES_PER_DAY
-        value: "40"
+        value: "0"

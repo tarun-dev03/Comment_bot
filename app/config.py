@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     email_dev_mode: bool = True
     email_login_enabled: bool = True
 
-    max_messages_per_day: int = 40
+    max_messages_per_day: int = 0  # 0 = unlimited
 
     google_scopes: list[str] = [
         "openid",

@@ -32,9 +32,16 @@ async def _load_custom_phrases(db: AsyncSession, user_id: int) -> list[str]:
 async def _bot_loop(user_id: int) -> None:
     stop_event = _stop_flags[user_id]
     settings = get_settings()
+    loop = asyncio.get_running_loop()
+    start_time = loop.time()
+    max_duration_seconds = 3600  # Run for 1 hour
 
     try:
         while not stop_event.is_set():
+            if loop.time() - start_time >= max_duration_seconds:
+                logger.info("Bot for user %s completed 1 hour runtime limit", user_id)
+                break
+
             async with async_session_factory() as db:
                 result = await db.execute(select(BotJob).where(BotJob.user_id == user_id))
                 job = result.scalar_one_or_none()
@@ -46,7 +53,7 @@ async def _bot_loop(user_id: int) -> None:
                     job.quota_day = today
                     job.messages_sent_today = 0
 
-                if job.messages_sent_today >= settings.max_messages_per_day:
+                if settings.max_messages_per_day > 0 and job.messages_sent_today >= settings.max_messages_per_day:
                     job.status = BotJobStatus.ERROR.value
                     job.last_error = (
                         f"Daily app limit reached ({settings.max_messages_per_day} messages). "
