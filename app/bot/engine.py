@@ -47,6 +47,7 @@ async def _bot_loop(user_id: int) -> None:
                     job.quota_day = today
                     job.messages_sent_today = 0
 
+                interval_sec = job.interval_seconds or 30
                 mode = job.mode or "oauth"
 
                 phrases = await _load_custom_phrases(db, user_id)
@@ -89,28 +90,37 @@ async def _bot_loop(user_id: int) -> None:
                     await db.commit()
                 except YouTubeAPIError as e:
                     if e.is_auth:
-                        from app.auth.google_oauth import invalidate_token_cache
-                        invalidate_token_cache(user_id)
-                        access_retry = await get_access_token_for_user(db, user_id, force_refresh=True)
-                        if access_retry:
-                            try:
-                                await insert_live_chat_message(access_retry, job.live_chat_id, text)
-                                consecutive_errors = 0
-                                job.messages_sent += 1
-                                job.messages_sent_today += 1
-                                job.last_message_at = datetime.now(UTC)
-                                job.last_error = None
-                                await db.commit()
-                                continue
-                            except YouTubeAPIError as e_retry:
-                                e = e_retry
+                        if mode == "oauth":
+                            from app.auth.google_oauth import invalidate_token_cache
+                            invalidate_token_cache(user_id)
+                            access_retry = await get_access_token_for_user(db, user_id, force_refresh=True)
+                            if access_retry:
+                                try:
+                                    await insert_live_chat_message(access_retry, job.live_chat_id, text)
+                                    consecutive_errors = 0
+                                    job.messages_sent += 1
+                                    job.messages_sent_today += 1
+                                    job.last_message_at = datetime.now(UTC)
+                                    job.last_error = None
+                                    await db.commit()
+                                    continue
+                                except YouTubeAPIError as e_retry:
+                                    e = e_retry
+                        else:
+                            job.status = BotJobStatus.ERROR.value
+                            job.last_error = f"YouTube Cookie auth error: {e}"
+                            await db.commit()
+                            break
 
-                    if e.is_quota and mode == "oauth":
+                    if e.is_quota:
                         job.status = BotJobStatus.ERROR.value
-                        job.last_error = (
-                            "YouTube API daily quota limit reached (10,000 units/day). "
-                            "Quota resets at 00:00 PST (midnight). Increase interval to save quota."
-                        )
+                        if mode == "cookie":
+                            job.last_error = f"YouTube Web Chat error: {e}"
+                        else:
+                            job.last_error = (
+                                "YouTube API daily quota limit reached (10,000 units/day). "
+                                "Quota resets at 00:00 PST (midnight). Switch to YouTube Web Cookie Mode for quota-free sending."
+                            )
                         await db.commit()
                         break
                     elif e.is_transient:

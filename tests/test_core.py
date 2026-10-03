@@ -79,7 +79,32 @@ def test_token_cache_invalidation():
 def test_extract_cookie_val():
     from app.youtube.live_chat import _extract_cookie_val
 
-    cookie = "VISITOR_INFO1_LIVE=xyz123; SAPISID=abc456hash; SID=my_sid;"
+    cookie = 'VISITOR_INFO1_LIVE="xyz123"; SAPISID=abc456hash; SID=my_sid;'
     assert _extract_cookie_val(cookie, "SAPISID") == "abc456hash"
     assert _extract_cookie_val(cookie, "VISITOR_INFO1_LIVE") == "xyz123"
     assert _extract_cookie_val(cookie, "NON_EXISTENT") is None
+
+
+@pytest.mark.anyio
+async def test_send_innertube_missing_sapisid_raises_auth_error():
+    from app.youtube.live_chat import YouTubeAPIError, send_innertube_live_chat_message
+
+    cookie = "VISITOR_INFO1_LIVE=xyz123; SID=my_sid;"
+    with pytest.raises(YouTubeAPIError) as exc_info:
+        await send_innertube_live_chat_message(cookie, "dQw4w9WgXcQ", "Hello world")
+    assert exc_info.value.is_auth is True
+    assert "SAPISID" in str(exc_info.value)
+
+
+def test_user_cookie_string_extraction():
+    from app.youtube.live_chat import _extract_cookie_val
+
+    user_cookie = (
+        'wide=0; APISID=TBYvfa_d9AA2vkSwAxJyYP1oxsR; SAPISID=IFSOiPVeak-u96Mh4GJY794; '
+        '__Secure-1PAPISID=I/ASak-u96Mh4GJY794; __Secure-3PAPISID94; '
+        'SID=g.a0ZsngSsauareTVL_AW9gDIit8X2y8rgE5AACgYKAbgSARESFQHGX2MiBk4gBd-C8k8SL6uAJ0sz8RoVAUF8yKqsT8sk5C-GktYy4VvZL7s00076;'
+    )
+    sapisid = _extract_cookie_val(user_cookie, "SAPISID")
+    assert sapisid == "IFSOiPVeak-u96Mh4GJY794"
+
+
