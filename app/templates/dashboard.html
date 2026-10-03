@@ -24,8 +24,8 @@
   {% endif %}
   <form method="post" action="/api/auth/cookie" class="stack">
     <label for="cookie">Paste YouTube Cookie Header (from browser inspect -> youtube.com request)</label>
-    <textarea id="cookie" name="cookie" rows="3" placeholder="e.g. VISITOR_INFO1_LIVE=...; SID=...; HSID=...; SAPISID=..." required style="width:100%; border-radius:6px; padding:0.5rem; border:1px solid #ccc; font-family:monospace; font-size:0.8rem;"></textarea>
-    <button type="submit" class="btn btn-ghost">Save YouTube Cookie</button>
+    <textarea id="cookie" name="cookie" rows="3" placeholder="{% if has_cookie %}●●●●●●●● (YouTube cookie is saved and active. Paste here only to update or replace it){% else %}e.g. VISITOR_INFO1_LIVE=...; SID=...; HSID=...; SAPISID=...{% endif %}" required style="width:100%; border-radius:6px; padding:0.5rem; border:1px solid #ccc; font-family:monospace; font-size:0.8rem;"></textarea>
+    <button type="submit" class="btn btn-ghost">{% if has_cookie %}Update YouTube Cookie{% else %}Save YouTube Cookie{% endif %}</button>
   </form>
 </section>
 
