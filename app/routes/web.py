@@ -269,6 +269,14 @@ async def save_cookie(
         existing.cookie_encrypted = encrypted
     else:
         db.add(UserCookie(user_id=user.id, cookie_encrypted=encrypted))
+
+    res_job = await db.execute(select(BotJob).where(BotJob.user_id == user.id))
+    job = res_job.scalar_one_or_none()
+    if job:
+        job.mode = "cookie"
+        job.last_error = None
+        if job.status == BotJobStatus.ERROR.value:
+            job.status = BotJobStatus.STOPPED.value
     await db.commit()
     return RedirectResponse("/", status_code=303)
 
