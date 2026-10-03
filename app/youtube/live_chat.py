@@ -149,6 +149,45 @@ def _extract_cookie_val(cookie_str: str, name: str) -> str | None:
     return None
 
 
+def _find_send_chat_params(data: any) -> str | None:
+    """Recursively search for sendLiveChatMessageEndpoint params in ytInitialData."""
+    if isinstance(data, dict):
+        if "sendLiveChatMessageEndpoint" in data and isinstance(data["sendLiveChatMessageEndpoint"], dict):
+            p = data["sendLiveChatMessageEndpoint"].get("params")
+            if p:
+                return p
+        for v in data.values():
+            res = _find_send_chat_params(v)
+            if res:
+                return res
+    elif isinstance(data, list):
+        for item in data:
+            res = _find_send_chat_params(item)
+            if res:
+                return res
+    return None
+
+
+def _check_chat_restrictions(data: any) -> str | None:
+    """Check if stream participation is restricted (subscribers-only, members-only, etc.)."""
+    if isinstance(data, dict):
+        if "liveChatRestrictedParticipationRenderer" in data:
+            rend = data["liveChatRestrictedParticipationRenderer"]
+            msg = rend.get("message", {}).get("runs", [])
+            text = "".join(r.get("text", "") for r in msg if isinstance(r, dict))
+            return text or "Chat participation is restricted (e.g. subscribers-only, members-only, or channel required)."
+        for v in data.values():
+            res = _check_chat_restrictions(v)
+            if res:
+                return res
+    elif isinstance(data, list):
+        for item in data:
+            res = _check_chat_restrictions(item)
+            if res:
+                return res
+    return None
+
+
 async def send_innertube_live_chat_message(
     cookie_string: str, video_id: str, message: str
 ) -> None:
@@ -156,6 +195,7 @@ async def send_innertube_live_chat_message(
     import json
     import time
     import urllib.parse
+    import uuid
 
     cookie_string = " ".join(cookie_string.splitlines()).strip()
     if not cookie_string:
@@ -230,34 +270,32 @@ async def send_innertube_live_chat_message(
             client_version = client_ver_match.group(1)
 
             params = None
-            # Specific endpoints first
-            endpoint_match = re.search(r'"sendLiveChatMessageEndpoint":\s*\{[^}]*"params":\s*"([^"]+)"', html) or \
-                             re.search(r'"liveChatRenderer":\s*\{[^}]*"params":\s*"([^"]+)"', html)
-            if endpoint_match:
-                params = endpoint_match.group(1)
+            yt_initial_data = None
+            match = re.search(r'window\["ytInitialData"\]\s*=\s*(\{.*?\});</script>', html) or \
+                    re.search(r'var ytInitialData\s*=\s*(\{.*?\});</script>', html)
+            if match:
+                try:
+                    yt_initial_data = json.loads(match.group(1))
+                    params = _find_send_chat_params(yt_initial_data)
+                    if not params:
+                        restriction = _check_chat_restrictions(yt_initial_data)
+                        if restriction:
+                            raise YouTubeAPIError(f"Cannot chat on this live stream: {restriction}", 400)
+                except YouTubeAPIError:
+                    raise
+                except Exception:
+                    pass
 
             if not params:
-                match = re.search(r'window\["ytInitialData"\]\s*=\s*(\{.*?\});</script>', html) or \
-                        re.search(r'var ytInitialData\s*=\s*(\{.*?\});</script>', html)
-                if match:
-                    try:
-                        data_json = json.loads(match.group(1))
-                        data_str = json.dumps(data_json)
-                        params_matches = re.findall(r'"params":\s*"([^\"]+)"', data_str)
-                        if params_matches:
-                            params = params_matches[0]
-                    except Exception:
-                        pass
-
-            if not params:
-                params_match = re.search(r'"params":\s*"([a-zA-Z0-9%_-]{20,})"', html)
-                if params_match:
-                    params = params_match.group(1)
+                endpoint_match = re.search(r'"sendLiveChatMessageEndpoint":\s*\{.*?"params":\s*"([^"]+)"', html, re.DOTALL) or \
+                                 re.search(r'"liveChatRenderer":\s*\{.*?"params":\s*"([^"]+)"', html, re.DOTALL)
+                if endpoint_match:
+                    params = endpoint_match.group(1)
 
             if not params:
                 raise YouTubeAPIError(
                     "Could not extract live chat submission parameters. "
-                    "Make sure your YouTube cookie is valid and the stream is actively live.",
+                    "Make sure your YouTube cookie has active channel permissions and the stream allows live chat.",
                     429,
                 )
 
@@ -275,11 +313,13 @@ async def send_innertube_live_chat_message(
                 "Content-Type": "application/json",
                 "X-YouTube-Client-Name": "1",
                 "X-YouTube-Client-Version": client_version,
+                "X-Goog-AuthUser": "0",
                 "Origin": "https://www.youtube.com",
                 "Referer": f"https://www.youtube.com/live_chat?v={video_id}",
                 "Authorization": auth_header,
             }
 
+            client_msg_id = str(uuid.uuid4())
             send_url = f"https://www.youtube.com/youtubei/v1/live_chat/send_message?key={api_key}"
             payload = {
                 "context": {
@@ -291,10 +331,13 @@ async def send_innertube_live_chat_message(
                     }
                 },
                 "params": params,
+                "clientMessageId": client_msg_id,
                 "richMessage": {
-                    "textMessageEvent": {
-                        "messageText": message.strip()[:200]
-                    }
+                    "textSegments": [
+                        {
+                            "text": message.strip()[:200]
+                        }
+                    ]
                 }
             }
 
@@ -323,5 +366,28 @@ async def send_innertube_live_chat_message(
             error_msg = res_data.get("error", {}).get("message")
             if error_msg:
                 raise YouTubeAPIError(f"YouTube chat error: {error_msg}", 429)
+
+            actions = res_data.get("actions", [])
+            has_chat_item = any("addChatItemAction" in act for act in actions if isinstance(act, dict))
+            if not has_chat_item:
+                if any("runAttestationCommand" in act for act in actions if isinstance(act, dict)):
+                    raise YouTubeAPIError(
+                        "YouTube bot attestation challenge triggered. Open this live stream in your browser and send one manual comment to verify your session.",
+                        429,
+                    )
+                logger.warning("YouTube send_message succeeded with 200 but returned no addChatItemAction: %s", res_data)
+                act_keys = [list(a.keys())[0] for a in actions if isinstance(a, dict) and a.keys()]
+                if not actions:
+                    raise YouTubeAPIError(
+                        "Comment sent, but YouTube silently filtered it (empty actions). "
+                        "Check if your account has a YouTube channel created (go to youtube.com -> Your channel) "
+                        "or try simpler custom phrases.",
+                        400,
+                    )
+                else:
+                    raise YouTubeAPIError(
+                        f"Comment sent, but YouTube returned action: {act_keys}. Message was not confirmed in chat.",
+                        400,
+                    )
     except httpx.RequestError as exc:
         raise YouTubeAPIError(f"Network error sending InnerTube message: {exc}", 503) from exc

@@ -129,3 +129,80 @@ async def test_innertube_sign_in_to_chat_detected(monkeypatch):
     assert exc_info.value.is_auth is True
 
 
+def test_find_send_chat_params_and_restrictions():
+    from app.youtube.live_chat import _find_send_chat_params, _check_chat_restrictions
+
+    nested_data = {
+        "contents": {
+            "liveChatRenderer": {
+                "actionPanel": {
+                    "liveChatMessageInputRenderer": {
+                        "sendButton": {
+                            "buttonRenderer": {
+                                "serviceEndpoint": {
+                                    "sendLiveChatMessageEndpoint": {
+                                        "params": "my_exact_chat_param_token"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    assert _find_send_chat_params(nested_data) == "my_exact_chat_param_token"
+
+    restricted_data = {
+        "actionPanel": {
+            "liveChatRestrictedParticipationRenderer": {
+                "message": {"runs": [{"text": "Subscribers only (10 minutes minimum)"}]}
+            }
+        }
+    }
+    assert _check_chat_restrictions(restricted_data) == "Subscribers only (10 minutes minimum)"
+
+
+@pytest.mark.anyio
+async def test_innertube_successful_chat_post(monkeypatch):
+    import httpx
+    from app.youtube.live_chat import send_innertube_live_chat_message
+
+    class MockGetResp:
+        status_code = 200
+        text = '''<html>
+        <script>var ytInitialData = {"sendLiveChatMessageEndpoint": {"params": "valid_token"}};</script>
+        "INNERTUBE_API_KEY": "test_key",
+        "INNERTUBE_CLIENT_VERSION": "2.20261002.01.00"
+        </html>'''
+
+    captured_payload = {}
+
+    class MockPostResp:
+        status_code = 200
+        def json(self):
+            return {
+                "actions": [
+                    {"addChatItemAction": {"item": {"liveChatTextMessageRenderer": {}}}}
+                ]
+            }
+
+    async def mock_get(self, url, **kwargs):
+        return MockGetResp()
+
+    async def mock_post(self, url, **kwargs):
+        nonlocal captured_payload
+        captured_payload = kwargs.get("json", {})
+        return MockPostResp()
+
+    monkeypatch.setattr(httpx.AsyncClient, "get", mock_get)
+    monkeypatch.setattr(httpx.AsyncClient, "post", mock_post)
+
+    cookie = "SAPISID=test_sapisid; SID=test_sid; HSID=test_hsid;"
+    await send_innertube_live_chat_message(cookie, "dQw4w9WgXcQ", "Hello chat")
+
+    assert captured_payload["richMessage"]["textSegments"][0]["text"] == "Hello chat"
+    assert "clientMessageId" in captured_payload
+    assert captured_payload["params"] == "valid_token"
+
+
