@@ -31,17 +31,11 @@ async def _load_custom_phrases(db: AsyncSession, user_id: int) -> list[str]:
 
 async def _bot_loop(user_id: int) -> None:
     stop_event = _stop_flags[user_id]
-    settings = get_settings()
-    loop = asyncio.get_running_loop()
-    start_time = loop.time()
-    max_duration_seconds = 3600  # Run for 1 hour
+    consecutive_errors = 0
+    max_consecutive_transient_errors = 5
 
     try:
         while not stop_event.is_set():
-            if loop.time() - start_time >= max_duration_seconds:
-                logger.info("Bot for user %s completed 1 hour runtime limit", user_id)
-                break
-
             async with async_session_factory() as db:
                 result = await db.execute(select(BotJob).where(BotJob.user_id == user_id))
                 job = result.scalar_one_or_none()
@@ -53,12 +47,7 @@ async def _bot_loop(user_id: int) -> None:
                     job.quota_day = today
                     job.messages_sent_today = 0
 
-                access = await get_access_token_for_user(db, user_id)
-                if not access:
-                    job.status = BotJobStatus.ERROR.value
-                    job.last_error = "Google/YouTube not connected or token expired."
-                    await db.commit()
-                    break
+                mode = job.mode or "oauth"
 
                 phrases = await _load_custom_phrases(db, user_id)
                 if user_id not in _generators:
@@ -69,20 +58,93 @@ async def _bot_loop(user_id: int) -> None:
                 text = generator.next_message()
 
                 try:
-                    await insert_live_chat_message(access, job.live_chat_id, text)
+                    if mode == "cookie":
+                        from app.models import UserCookie
+                        from app.security import decrypt_text
+                        from app.youtube.live_chat import send_innertube_live_chat_message
+
+                        c_res = await db.execute(select(UserCookie).where(UserCookie.user_id == user_id))
+                        row_cookie = c_res.scalar_one_or_none()
+                        if not row_cookie:
+                            job.status = BotJobStatus.ERROR.value
+                            job.last_error = "YouTube Cookie missing. Save your YouTube Cookie in dashboard settings."
+                            await db.commit()
+                            break
+                        cookie_str = decrypt_text(row_cookie.cookie_encrypted)
+                        await send_innertube_live_chat_message(cookie_str, job.video_id, text)
+                    else:
+                        access = await get_access_token_for_user(db, user_id)
+                        if not access:
+                            job.status = BotJobStatus.ERROR.value
+                            job.last_error = "Google/YouTube authorization missing or expired."
+                            await db.commit()
+                            break
+                        await insert_live_chat_message(access, job.live_chat_id, text)
+
+                    consecutive_errors = 0
+                    job.messages_sent += 1
+                    job.messages_sent_today += 1
+                    job.last_message_at = datetime.now(UTC)
+                    job.last_error = None
+                    await db.commit()
                 except YouTubeAPIError as e:
+                    if e.is_auth:
+                        from app.auth.google_oauth import invalidate_token_cache
+                        invalidate_token_cache(user_id)
+                        access_retry = await get_access_token_for_user(db, user_id, force_refresh=True)
+                        if access_retry:
+                            try:
+                                await insert_live_chat_message(access_retry, job.live_chat_id, text)
+                                consecutive_errors = 0
+                                job.messages_sent += 1
+                                job.messages_sent_today += 1
+                                job.last_message_at = datetime.now(UTC)
+                                job.last_error = None
+                                await db.commit()
+                                continue
+                            except YouTubeAPIError as e_retry:
+                                e = e_retry
+
+                    if e.is_quota:
+                        job.status = BotJobStatus.ERROR.value
+                        job.last_error = (
+                            "YouTube API daily quota limit reached (10,000 units/day). "
+                            "Quota resets at 00:00 PST (midnight). Increase interval to save quota."
+                        )
+                        await db.commit()
+                        break
+                    elif e.is_transient:
+                        consecutive_errors += 1
+                        logger.warning(
+                            "Transient YouTube error for user %s (%d/%d): %s",
+                            user_id, consecutive_errors, max_consecutive_transient_errors, e
+                        )
+                        if consecutive_errors >= max_consecutive_transient_errors:
+                            job.status = BotJobStatus.ERROR.value
+                            job.last_error = f"Bot stopped after {consecutive_errors} network/API errors: {e}"
+                            await db.commit()
+                            break
+                        backoff = min(15 * (2 ** (consecutive_errors - 1)), 180)
+                        job.last_error = f"Temporary warning ({consecutive_errors}/{max_consecutive_transient_errors}): {e}. Retrying..."
+                        await db.commit()
+                        try:
+                            await asyncio.wait_for(stop_event.wait(), timeout=backoff)
+                            break
+                        except TimeoutError:
+                            continue
+                    else:
+                        job.status = BotJobStatus.ERROR.value
+                        job.last_error = str(e)
+                        await db.commit()
+                        break
+                except Exception as exc:
+                    logger.exception("Unexpected error in bot loop for user %s", user_id)
                     job.status = BotJobStatus.ERROR.value
-                    job.last_error = str(e)
+                    job.last_error = f"Unexpected error: {exc}"
                     await db.commit()
                     break
 
-                job.messages_sent += 1
-                job.messages_sent_today += 1
-                job.last_message_at = datetime.now(UTC)
-                job.last_error = None
-                await db.commit()
-
-            delay = random.uniform(10, 20)
+            delay = random.uniform(interval_sec, interval_sec + 5)
             try:
                 await asyncio.wait_for(stop_event.wait(), timeout=delay)
                 break

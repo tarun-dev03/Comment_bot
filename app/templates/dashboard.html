@@ -16,24 +16,58 @@
   <p class="muted">Share this app URL so others can sign in with their own Google account.</p>
 </section>
 
-{% if not oauth %}
+<section class="card">
+  <h2>Alternative: Unlimited YouTube Web Cookie Mode (100% Quota-Free)</h2>
+  <p class="muted">Bypasses the 50 comments/day YouTube Data API limit completely using your YouTube browser session.</p>
+  {% if has_cookie %}
+  <p class="success">✓ YouTube Web Cookie saved and ready for unlimited commenting.</p>
+  {% endif %}
+  <form method="post" action="/api/auth/cookie" class="stack">
+    <label for="cookie">Paste YouTube Cookie Header (from browser inspect -> youtube.com request)</label>
+    <textarea id="cookie" name="cookie" rows="3" placeholder="e.g. VISITOR_INFO1_LIVE=...; SID=...; HSID=...; SAPISID=..." required style="width:100%; border-radius:6px; padding:0.5rem; border:1px solid #ccc; font-family:monospace; font-size:0.8rem;"></textarea>
+    <button type="submit" class="btn btn-ghost">Save YouTube Cookie</button>
+  </form>
+</section>
+
+{% if not oauth and not has_cookie %}
 <section class="card">
   <h2>Connect YouTube</h2>
-  <p>Grant YouTube access to post in live chat.</p>
+  <p>Grant YouTube access via Google OAuth or save your YouTube Cookie above.</p>
   <a class="btn btn-primary" href="/auth/google/start">Connect Google</a>
 </section>
 {% else %}
 <section class="card">
-  <p class="success">YouTube connected{% if oauth.google_email %} as {{ oauth.google_email }}{% endif %}.</p>
-  <a class="btn btn-ghost" href="/auth/google/start">Reconnect Google</a>
+  <p class="success">
+    {% if oauth %}YouTube OAuth connected{% if oauth.google_email %} as {{ oauth.google_email }}{% endif %}.{% endif %}
+    {% if has_cookie %} (Cookie mode available){% endif %}
+  </p>
+  {% if oauth %}<a class="btn btn-ghost" href="/auth/google/start">Reconnect Google</a>{% endif %}
 </section>
 {% endif %}
 
 <section class="card">
-  <h2>{% if oauth %}Live stream{% else %}2. Live stream{% endif %}</h2>
+  <h2>Live stream bot runner</h2>
   <form id="start-form" class="stack">
-    <label for="stream_url">YouTube live URL</label>
+    <label for="stream_url">YouTube live stream URL</label>
     <input id="stream_url" name="stream_url" type="url" placeholder="https://www.youtube.com/watch?v=..." value="{{ job.stream_url if job else '' }}">
+    
+    <label for="mode">Commenting Method / Engine</label>
+    <select id="mode" name="mode" style="padding: 0.6rem; border-radius: 6px; border: 1px solid #ccc;">
+      <option value="cookie" {% if job and job.mode == 'cookie' %}selected{% elif has_cookie %}selected{% endif %}>⚡ YouTube Web Cookie Mode (100% Quota-Free / Unlimited Comments)</option>
+      <option value="oauth" {% if job and job.mode == 'oauth' %}selected{% elif not has_cookie and oauth %}selected{% endif %}>🔑 Google OAuth API Mode (Subject to 50 msg/day YouTube API Quota)</option>
+    </select>
+
+    <label for="interval_seconds">Comment interval (frequency)</label>
+    <select id="interval_seconds" name="interval_seconds" style="padding: 0.6rem; border-radius: 6px; border: 1px solid #ccc;">
+      <option value="5" {% if job and job.interval_seconds == 5 %}selected{% endif %}>⚡ 5 seconds (~720/hr - Ultra Fast)</option>
+      <option value="10" {% if job and job.interval_seconds == 10 %}selected{% endif %}>🔥 10 seconds (~360/hr - Very Fast)</option>
+      <option value="15" {% if job and job.interval_seconds == 15 %}selected{% endif %}>15 seconds (~240/hr - Fast continuous)</option>
+      <option value="30" {% if not job or job.interval_seconds == 30 %}selected{% endif %}>30 seconds (~120/hr - Standard)</option>
+      <option value="60" {% if job and job.interval_seconds == 60 %}selected{% endif %}>60 seconds (1 min - Recommended)</option>
+      <option value="120" {% if job and job.interval_seconds == 120 %}selected{% endif %}>120 seconds (2 mins)</option>
+      <option value="300" {% if job and job.interval_seconds == 300 %}selected{% endif %}>300 seconds (5 mins)</option>
+    </select>
+
     <div class="row">
       <button type="button" id="btn-start" class="btn btn-primary">Start bot</button>
       <button type="button" id="btn-stop" class="btn btn-danger">Stop</button>
@@ -45,7 +79,7 @@
 </section>
 
 <section class="card">
-  <h2>{% if oauth %}Your phrases{% else %}3. Your phrases{% endif %} (optional)</h2>
+  <h2>Your phrases (optional)</h2>
   <p class="muted">Added to the built-in pool; the bot avoids repeating recent messages.</p>
   <form method="post" action="/api/phrases" class="stack">
     <input name="phrase" maxlength="200" placeholder="Add a custom comment..." required>
@@ -71,9 +105,11 @@ async function refreshStatus() {
 function formatStatus(data) {
   let html = '<dl class="status-dl">';
   html += '<dt>Status</dt><dd>' + (data.running ? 'Running' : data.status) + '</dd>';
+  html += '<dt>Method</dt><dd>' + (data.mode === 'cookie' ? '⚡ Web Cookie (Quota-Free Unlimited)' : '🔑 Google OAuth API') + '</dd>';
+  html += '<dt>Interval</dt><dd>Every ' + (data.interval_seconds || 30) + ' seconds</dd>';
   html += '<dt>Messages sent</dt><dd>' + (data.messages_sent || 0) + '</dd>';
-  html += '<dt>Today</dt><dd>' + (data.messages_sent_today || 0) + ' (Unlimited)</dd>';
-  if (data.last_error) html += '<dt class="error">Error</dt><dd class="error">' + escapeHtml(data.last_error) + '</dd>';
+  html += '<dt>Today</dt><dd>' + (data.messages_sent_today || 0) + (data.mode === 'cookie' ? ' (Unlimited 🎉)' : ' (API limit ~50 msg/day)') + '</dd>';
+  if (data.last_error) html += '<dt class="error">Error / Notice</dt><dd class="error">' + escapeHtml(data.last_error) + '</dd>';
   html += '</dl>';
   return html;
 }
@@ -84,10 +120,12 @@ function escapeHtml(s) {
 }
 document.getElementById('btn-start').addEventListener('click', async () => {
   const url = document.getElementById('stream_url').value;
+  const interval = parseInt(document.getElementById('interval_seconds').value, 10) || 30;
+  const mode = document.getElementById('mode').value;
   const r = await fetch('/api/bots/start', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({stream_url: url})
+    body: JSON.stringify({stream_url: url, interval_seconds: interval, mode: mode})
   });
   const data = await r.json().catch(() => ({}));
   if (!r.ok) alert(data.detail || 'Failed to start');

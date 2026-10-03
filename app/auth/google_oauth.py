@@ -53,9 +53,18 @@ async def exchange_code_for_tokens(code: str, redirect_uri: str) -> dict:
         return resp.json()
 
 
-async def refresh_access_token(refresh_token: str) -> str:
+import time
+
+_access_token_cache: dict[int, dict] = {}
+
+
+def invalidate_token_cache(user_id: int) -> None:
+    _access_token_cache.pop(user_id, None)
+
+
+async def refresh_access_token_details(refresh_token: str) -> dict:
     settings = get_settings()
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=15.0) as client:
         resp = await client.post(
             GOOGLE_TOKEN_URL,
             data={
@@ -67,10 +76,15 @@ async def refresh_access_token(refresh_token: str) -> str:
             headers={"Content-Type": "application/x-www-form-urlencoded"},
         )
         resp.raise_for_status()
-        access = resp.json().get("access_token")
-        if not access:
-            raise ValueError("No access_token in refresh response")
-        return access
+        return resp.json()
+
+
+async def refresh_access_token(refresh_token: str) -> str:
+    data = await refresh_access_token_details(refresh_token)
+    access = data.get("access_token")
+    if not access:
+        raise ValueError("No access_token in refresh response")
+    return access
 
 
 async def fetch_google_email(access_token: str) -> str | None:
@@ -90,6 +104,7 @@ async def save_oauth_token(
     refresh_token: str,
     google_email: str | None,
 ) -> None:
+    invalidate_token_cache(user_id)
     encrypted = encrypt_text(refresh_token)
     result = await db.execute(select(OAuthToken).where(OAuthToken.user_id == user_id))
     row = result.scalar_one_or_none()
@@ -118,12 +133,34 @@ async def get_user_refresh_token(db: AsyncSession, user_id: int) -> str | None:
         return None
 
 
-async def get_access_token_for_user(db: AsyncSession, user_id: int) -> str | None:
+async def get_access_token_for_user(
+    db: AsyncSession, user_id: int, force_refresh: bool = False
+) -> str | None:
+    now = time.time()
+    if not force_refresh and user_id in _access_token_cache:
+        cached = _access_token_cache[user_id]
+        # Keep token if at least 300 seconds (5 minutes) remain before expiry
+        if cached["expires_at"] - now > 300:
+            return cached["token"]
+
     refresh = await get_user_refresh_token(db, user_id)
     if not refresh:
+        invalidate_token_cache(user_id)
         return None
+
     try:
-        return await refresh_access_token(refresh)
+        data = await refresh_access_token_details(refresh)
+        access = data.get("access_token")
+        expires_in = data.get("expires_in", 3600)
+        if access:
+            _access_token_cache[user_id] = {
+                "token": access,
+                "expires_at": now + expires_in,
+            }
+            return access
     except Exception:
         logger.exception("Token refresh failed for user %s", user_id)
+        invalidate_token_cache(user_id)
         return None
+
+    return None

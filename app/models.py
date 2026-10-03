@@ -21,6 +21,7 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     oauth_token: Mapped["OAuthToken | None"] = relationship(back_populates="user", uselist=False)
+    user_cookie: Mapped["UserCookie | None"] = relationship(back_populates="user", uselist=False)
     bot_jobs: Mapped[list["BotJob"]] = relationship(back_populates="user")
     custom_phrases: Mapped[list["UserPhrase"]] = relationship(back_populates="user")
 
@@ -60,6 +61,19 @@ class OAuthToken(Base):
     user: Mapped["User"] = relationship(back_populates="oauth_token")
 
 
+class UserCookie(Base):
+    __tablename__ = "user_cookies"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), unique=True, nullable=False)
+    cookie_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    user: Mapped["User"] = relationship(back_populates="user_cookie")
+
+
 class BotJob(Base):
     __tablename__ = "bot_jobs"
 
@@ -68,10 +82,12 @@ class BotJob(Base):
     stream_url: Mapped[str] = mapped_column(String(2048), nullable=False)
     video_id: Mapped[str] = mapped_column(String(32), nullable=False)
     live_chat_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    mode: Mapped[str] = mapped_column(String(32), default="oauth")
     status: Mapped[str] = mapped_column(String(32), default=BotJobStatus.STOPPED.value)
     messages_sent: Mapped[int] = mapped_column(Integer, default=0)
     messages_sent_today: Mapped[int] = mapped_column(Integer, default=0)
     quota_day: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    interval_seconds: Mapped[int] = mapped_column(Integer, default=30)
     last_message_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(

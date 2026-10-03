@@ -7,6 +7,8 @@ from sqlalchemy.orm import DeclarativeBase
 
 from app.config import get_settings
 
+from sqlalchemy import text
+
 logger = logging.getLogger(__name__)
 
 
@@ -44,6 +46,14 @@ async def init_db() -> None:
     try:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+            try:
+                await conn.execute(text("ALTER TABLE bot_jobs ADD COLUMN interval_seconds INTEGER DEFAULT 30"))
+            except Exception:
+                pass
+            try:
+                await conn.execute(text("ALTER TABLE bot_jobs ADD COLUMN mode VARCHAR(32) DEFAULT 'oauth'"))
+            except Exception:
+                pass
         logger.info("Database initialized")
     except Exception:
         logger.exception("Database initialization failed (check DATABASE_URL / Postgres SSL)")
