@@ -105,7 +105,7 @@ async def _bot_loop(user_id: int) -> None:
                             except YouTubeAPIError as e_retry:
                                 e = e_retry
 
-                    if e.is_quota:
+                    if e.is_quota and mode == "oauth":
                         job.status = BotJobStatus.ERROR.value
                         job.last_error = (
                             "YouTube API daily quota limit reached (10,000 units/day). "

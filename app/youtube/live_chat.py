@@ -11,7 +11,7 @@ class YouTubeAPIError(Exception):
         super().__init__(message)
         self.status_code = status_code
         self.is_auth = (status_code == 401)
-        self.is_quota = (status_code == 403 and any(k in message.lower() for k in ("quota", "limit")))
+        self.is_quota = (status_code == 403 and "quota" in message.lower())
         self.is_transient = (status_code in (429, 500, 502, 503, 504) or status_code is None)
 
 
@@ -201,8 +201,8 @@ async def send_innertube_live_chat_message(
             if not params:
                 raise YouTubeAPIError(
                     "Could not extract live chat submission parameters. "
-                    "Make sure your YouTube cookie is logged into an active channel that is allowed to chat.",
-                    403,
+                    "Make sure your YouTube cookie is valid and the stream is actively live.",
+                    429,
                 )
 
             sapisid = _extract_cookie_val(cookie_string, "SAPISID") or _extract_cookie_val(cookie_string, "__Secure-3PAPISID")
@@ -245,12 +245,17 @@ async def send_innertube_live_chat_message(
             }
 
             post_resp = await client.post(send_url, headers=post_headers, json=payload)
+            if post_resp.status_code in (403, 429):
+                raise YouTubeAPIError(
+                    f"YouTube Web Chat rate limit/slow mode (HTTP {post_resp.status_code}). Temporary cooldown active.",
+                    429,
+                )
             if post_resp.status_code not in (200, 201):
                 raise YouTubeAPIError(f"InnerTube request failed (HTTP {post_resp.status_code}): {post_resp.text[:150]}", post_resp.status_code)
 
             res_data = post_resp.json()
             error_msg = res_data.get("error", {}).get("message")
             if error_msg:
-                raise YouTubeAPIError(f"YouTube chat error: {error_msg}")
+                raise YouTubeAPIError(f"YouTube chat error: {error_msg}", 429)
     except httpx.RequestError as exc:
         raise YouTubeAPIError(f"Network error sending InnerTube message: {exc}", 503) from exc
