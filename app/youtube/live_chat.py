@@ -1,7 +1,10 @@
+import logging
 import re
 from urllib.parse import parse_qs, urlparse
 
 import httpx
+
+logger = logging.getLogger(__name__)
 
 YOUTUBE_API = "https://www.googleapis.com/youtube/v3"
 
@@ -152,6 +155,7 @@ async def send_innertube_live_chat_message(
     import hashlib
     import json
     import time
+    import urllib.parse
 
     cookie_string = " ".join(cookie_string.splitlines()).strip()
     if not cookie_string:
@@ -160,13 +164,29 @@ async def send_innertube_live_chat_message(
     sapisid = _extract_cookie_val(cookie_string, "SAPISID") or _extract_cookie_val(cookie_string, "__Secure-3PAPISID")
     if not sapisid:
         raise YouTubeAPIError(
-            "YouTube Cookie missing SAPISID or __Secure-3PAPISID. Ensure you copy the complete Cookie header from browser developer tools.",
+            "YouTube Cookie missing SAPISID. Make sure to copy the full 'Cookie:' header from DevTools > Network tab (do not use document.cookie).",
             401,
         )
 
+    has_sid = bool(
+        _extract_cookie_val(cookie_string, "SID")
+        or _extract_cookie_val(cookie_string, "__Secure-1PSID")
+        or _extract_cookie_val(cookie_string, "__Secure-3PSID")
+    )
+    has_hsid = bool(_extract_cookie_val(cookie_string, "HSID"))
+    if not has_sid or not has_hsid:
+        logger.warning(
+            "Cookie string appears to be missing SID or HSID (often caused by copying from Console/document.cookie)."
+        )
+
+    user_agent = (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36"
+    )
+
     url = f"https://www.youtube.com/live_chat?v={video_id}"
     headers = {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "User-Agent": user_agent,
         "Cookie": cookie_string,
         "Accept-Language": "en-US,en;q=0.9",
     }
@@ -180,6 +200,15 @@ async def send_innertube_live_chat_message(
                 raise YouTubeAPIError(f"Failed to load YouTube live chat page (HTTP {resp.status_code})", resp.status_code)
 
             html = resp.text
+            if "Sign in to chat" in html:
+                raise YouTubeAPIError(
+                    "YouTube rejected the cookie session (page says 'Sign in to chat'). "
+                    "This happens when cookies are copied from Console/document.cookie instead of DevTools Network tab, "
+                    "omitting required HttpOnly cookies (HSID/SSID/LOGIN_INFO). "
+                    "Please copy the full 'Cookie:' header from DevTools > Network tab > Request Headers.",
+                    401,
+                )
+
             api_key_match = re.search(r'"INNERTUBE_API_KEY":\s*"([^"]+)"', html)
             client_ver_match = re.search(r'"INNERTUBE_CLIENT_VERSION":\s*"([^"]+)"', html)
 
@@ -232,6 +261,8 @@ async def send_innertube_live_chat_message(
                     429,
                 )
 
+            params = urllib.parse.unquote(params)
+
             now_ts = int(time.time())
             origin = "https://www.youtube.com"
             raw_str = f"{now_ts} {sapisid} {origin}"
@@ -239,7 +270,7 @@ async def send_innertube_live_chat_message(
             auth_header = f"SAPISIDHASH {now_ts}_{sha1}"
 
             post_headers = {
-                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "User-Agent": user_agent,
                 "Cookie": cookie_string,
                 "Content-Type": "application/json",
                 "X-YouTube-Client-Name": "1",
@@ -269,7 +300,17 @@ async def send_innertube_live_chat_message(
 
             post_resp = await client.post(send_url, headers=post_headers, json=payload)
             if post_resp.status_code in (401, 403):
-                raise YouTubeAPIError("YouTube Cookie expired or unauthorized (HTTP 401/403). Please update your YouTube Cookie.", 401)
+                err_detail = ""
+                try:
+                    err_json = post_resp.json()
+                    err_detail = err_json.get("error", {}).get("message", "")
+                except Exception:
+                    pass
+                msg = f"YouTube Cookie expired or unauthorized (HTTP {post_resp.status_code})."
+                if err_detail:
+                    msg += f" YouTube error: {err_detail}."
+                msg += " Please update your YouTube Cookie from DevTools > Network tab."
+                raise YouTubeAPIError(msg, 401)
             if post_resp.status_code == 429:
                 raise YouTubeAPIError(
                     "YouTube Web Chat rate limit/slow mode (HTTP 429). Temporary cooldown active.",

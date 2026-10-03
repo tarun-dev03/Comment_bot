@@ -23,8 +23,17 @@
   <p class="success">✓ YouTube Web Cookie saved and ready for unlimited commenting.</p>
   {% endif %}
   <form method="post" action="/api/auth/cookie" class="stack">
-    <label for="cookie">Paste YouTube Cookie Header (from browser inspect -> youtube.com request)</label>
-    <textarea id="cookie" name="cookie" rows="3" placeholder="{% if has_cookie %}●●●●●●●● (YouTube cookie is saved and active. Paste here only to update or replace it){% else %}e.g. VISITOR_INFO1_LIVE=...; SID=...; HSID=...; SAPISID=...{% endif %}" required style="width:100%; border-radius:6px; padding:0.5rem; border:1px solid #ccc; font-family:monospace; font-size:0.8rem;"></textarea>
+    <label for="cookie">Paste YouTube Cookie Header (from browser DevTools → Network tab)</label>
+    <div style="background:#f1f5f9; border:1px solid #cbd5e1; border-radius:6px; padding:0.6rem 0.8rem; font-size:0.8rem; color:#334155; line-height:1.5;">
+      <strong>⚠️ How to copy the complete cookie:</strong><br>
+      1. Open <a href="https://www.youtube.com" target="_blank" rel="noopener">youtube.com</a> in Chrome/Edge/Firefox while logged in.<br>
+      2. Press <code>F12</code> (or right-click → <em>Inspect</em>) and open the <strong>Network</strong> tab.<br>
+      3. Refresh the page or click any video.<br>
+      4. In the Network list, click any request to <code>youtube.com</code>.<br>
+      5. Under <strong>Headers</strong> → <strong>Request Headers</strong>, find <code>Cookie:</code> → right-click and choose <strong>Copy value</strong>.<br>
+      <span style="color:#b91c1c;"><em>Note: Do not use Console (<code>document.cookie</code>) — it lacks HttpOnly cookies (HSID/SSID) required by YouTube.</em></span>
+    </div>
+    <textarea id="cookie" name="cookie" rows="3" placeholder="{% if has_cookie %}●●●●●●●● (YouTube cookie is saved and active. Paste here only to update or replace it){% else %}e.g. VISITOR_INFO1_LIVE=...; SID=...; HSID=...; SSID=...; SAPISID=...; LOGIN_INFO=...{% endif %}" required style="width:100%; border-radius:6px; padding:0.5rem; border:1px solid #ccc; font-family:monospace; font-size:0.8rem;"></textarea>
     <button type="submit" class="btn btn-ghost">{% if has_cookie %}Update YouTube Cookie{% else %}Save YouTube Cookie{% endif %}</button>
   </form>
 </section>

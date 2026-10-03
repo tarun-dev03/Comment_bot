@@ -108,3 +108,24 @@ def test_user_cookie_string_extraction():
     assert sapisid == "IFSOiPVeak-u96Mh4GJY794"
 
 
+@pytest.mark.anyio
+async def test_innertube_sign_in_to_chat_detected(monkeypatch):
+    import httpx
+    from app.youtube.live_chat import YouTubeAPIError, send_innertube_live_chat_message
+
+    class MockResp:
+        status_code = 200
+        text = '<html><div id="content">Sign in to chat</div></html>'
+
+    async def mock_get(self, url, **kwargs):
+        return MockResp()
+
+    monkeypatch.setattr(httpx.AsyncClient, "get", mock_get)
+
+    cookie = "SAPISID=test_sapisid; SID=test_sid;"
+    with pytest.raises(YouTubeAPIError) as exc_info:
+        await send_innertube_live_chat_message(cookie, "dQw4w9WgXcQ", "Hello")
+    assert "Sign in to chat" in str(exc_info.value)
+    assert exc_info.value.is_auth is True
+
+
