@@ -20,7 +20,7 @@ from app.bot.engine import is_bot_running, start_bot_task, stop_bot_task
 from app.config import get_settings
 from app.deps import SESSION_COOKIE, get_current_user, get_current_user_optional
 from app.db import async_session_factory, get_db
-from app.models import BotJob, BotJobStatus, OAuthToken, User, UserPhrase
+from app.models import BotJob, BotJobStatus, OAuthToken, User, UserCookie, UserPhrase
 from app.security import apply_session_cookie
 from app.youtube.live_chat import YouTubeAPIError, fetch_live_chat_id, parse_video_id
 
