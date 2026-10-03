@@ -307,17 +307,46 @@ async def send_innertube_live_chat_message(
             sha1 = hashlib.sha1(raw_str.encode("utf-8")).hexdigest()
             auth_header = f"SAPISIDHASH {now_ts}_{sha1}"
 
+            session_index = None
+            delegated_session_id = None
+            for m in re.finditer(r"ytcfg\.set\(\s*(\{.*?\})\s*\);", html, re.DOTALL):
+                try:
+                    cfg = json.loads(m.group(1))
+                    if "SESSION_INDEX" in cfg and cfg["SESSION_INDEX"] is not None:
+                        session_index = str(cfg["SESSION_INDEX"])
+                    if "DELEGATED_SESSION_ID" in cfg and cfg["DELEGATED_SESSION_ID"]:
+                        delegated_session_id = str(cfg["DELEGATED_SESSION_ID"])
+                except Exception:
+                    pass
+
+            if session_index is None:
+                m_si = re.search(r'"SESSION_INDEX":\s*"?([0-9]+)"?', html)
+                if m_si:
+                    session_index = m_si.group(1)
+                elif "authuser=" in cookie_string:
+                    m_auth = re.search(r'authuser=(\d+)', cookie_string)
+                    if m_auth:
+                        session_index = m_auth.group(1)
+
+            if not delegated_session_id:
+                m_del = re.search(r'"DELEGATED_SESSION_ID":\s*"([^"]+)"', html)
+                if m_del:
+                    delegated_session_id = m_del.group(1)
+
             post_headers = {
                 "User-Agent": user_agent,
                 "Cookie": cookie_string,
                 "Content-Type": "application/json",
                 "X-YouTube-Client-Name": "1",
                 "X-YouTube-Client-Version": client_version,
-                "X-Goog-AuthUser": "0",
                 "Origin": "https://www.youtube.com",
                 "Referer": f"https://www.youtube.com/live_chat?v={video_id}",
                 "Authorization": auth_header,
             }
+            if session_index is not None:
+                post_headers["X-Goog-AuthUser"] = session_index
+            if delegated_session_id:
+                post_headers["X-Goog-PageId"] = delegated_session_id
 
             client_msg_id = str(uuid.uuid4())
             send_url = f"https://www.youtube.com/youtubei/v1/live_chat/send_message?key={api_key}"

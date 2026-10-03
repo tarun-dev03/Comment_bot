@@ -29,7 +29,7 @@ def build_google_authorize_url(state: str, redirect_uri: str) -> str:
         "response_type": "code",
         "scope": " ".join(settings.google_scopes),
         "access_type": "offline",
-        "prompt": "consent",
+        "prompt": "consent select_account",
         "state": state,
     }
     return f"{GOOGLE_AUTH_URL}?{urlencode(params)}"
