@@ -72,7 +72,10 @@ async def _bot_loop(user_id: int) -> None:
                             await db.commit()
                             break
                         cookie_str = decrypt_text(row_cookie.cookie_encrypted)
-                        await send_innertube_live_chat_message(cookie_str, job.video_id, text)
+                        updated_cookie_str = await send_innertube_live_chat_message(cookie_str, job.video_id, text)
+                        if updated_cookie_str and updated_cookie_str != cookie_str:
+                            from app.security import encrypt_text
+                            row_cookie.cookie_encrypted = encrypt_text(updated_cookie_str)
                     else:
                         access = await get_access_token_for_user(db, user_id)
                         if not access:

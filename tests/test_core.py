@@ -206,3 +206,47 @@ async def test_innertube_successful_chat_post(monkeypatch):
     assert captured_payload["params"] == "valid_token"
 
 
+def test_merge_cookies():
+    from app.youtube.live_chat import _merge_cookies
+
+    initial = "SID=sid123; HSID=hsid456; YSC=old_ysc;"
+    updated = {"YSC": "new_ysc", "VISITOR_INFO1_LIVE": "visitor_new"}
+    merged = _merge_cookies(initial, updated)
+    assert "YSC=new_ysc" in merged
+    assert "SID=sid123" in merged
+    assert "HSID=hsid456" in merged
+    assert "VISITOR_INFO1_LIVE=visitor_new" in merged
+
+
+@pytest.mark.anyio
+async def test_save_cookie_json_endpoint():
+    import httpx
+    from app.main import app
+    from app.db import init_db, async_session_factory
+    from app.models import User, UserCookie
+    from sqlalchemy import select
+
+    await init_db()
+    async with async_session_factory() as db:
+        res = await db.execute(select(User).where(User.email == "sync_test@example.com"))
+        user = res.scalar_one_or_none()
+        if not user:
+            user = User(email="sync_test@example.com")
+            db.add(user)
+            await db.commit()
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post(
+            "/api/auth/cookie",
+            json={"cookie": "SAPISID=fake_sync; SID=fake_sid;", "email": "sync_test@example.com"},
+            headers={"Content-Type": "application/json", "Accept": "application/json"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data.get("ok") is True
+        assert data.get("user") == "sync_test@example.com"
+
+
+
+

@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "name": "Comment Bot — YouTube Cookie Auto-Sync",
+  "version": "1.0.0",
+  "description": "Automatically captures your YouTube session cookies and syncs them to your Comment Bot app every 10–15 min so you never have to copy/paste them manually.",
+  "permissions": [
+    "cookies",
+    "storage",
+    "alarms"
+  ],
+  "host_permissions": [
+    "*://*.youtube.com/*",
+    "*://*.google.com/*",
+    "http://localhost:*/*",
+    "http://127.0.0.1:*/*",
+    "*://*.onrender.com/*",
+    "<all_urls>"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "YouTube Cookie Auto-Sync"
+  },
+  "background": {
+    "service_worker": "background.js"
+  }
+}

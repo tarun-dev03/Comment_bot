@@ -22,8 +22,11 @@
   {% if has_cookie %}
   <p class="success">✓ YouTube Web Cookie saved and ready for unlimited commenting.</p>
   {% endif %}
+  <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:6px; padding:0.6rem 0.8rem; font-size:0.85rem; color:#1e40af; line-height:1.4; margin-bottom: 0.8rem;">
+    <strong>🤖 Automatic Auto-Sync Available:</strong> Don't want to copy cookies manually? Load the included browser extension from the <code>extension/</code> folder in Chrome/Edge/Brave. It automatically fetches and syncs your YouTube cookies every 10–15 minutes in the background!
+  </div>
   <form method="post" action="/api/auth/cookie" class="stack">
-    <label for="cookie">Paste YouTube Cookie Header (from browser DevTools → Network tab)</label>
+    <label for="cookie">Paste YouTube Cookie Header (or sync automatically via extension)</label>
     <div style="background:#f1f5f9; border:1px solid #cbd5e1; border-radius:6px; padding:0.6rem 0.8rem; font-size:0.8rem; color:#334155; line-height:1.5;">
       <strong>⚠️ How to copy the complete cookie:</strong><br>
       1. Open <a href="https://www.youtube.com" target="_blank" rel="noopener">youtube.com</a> in Chrome/Edge/Firefox while logged in.<br>

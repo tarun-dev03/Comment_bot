@@ -149,6 +149,20 @@ def _extract_cookie_val(cookie_str: str, name: str) -> str | None:
     return None
 
 
+def _merge_cookies(cookie_string: str, new_cookies: dict[str, str]) -> str:
+    if not new_cookies:
+        return cookie_string
+    parsed: dict[str, str] = {}
+    for item in cookie_string.split(";"):
+        if "=" in item:
+            parts = item.strip().split("=", 1)
+            parsed[parts[0].strip()] = parts[1].strip()
+    for k, v in new_cookies.items():
+        if v:
+            parsed[k] = v
+    return "; ".join(f"{k}={v}" for k, v in parsed.items())
+
+
 def _find_send_chat_params(data: any) -> str | None:
     """Recursively search for sendLiveChatMessageEndpoint params in ytInitialData."""
     if isinstance(data, dict):
@@ -190,7 +204,7 @@ def _check_chat_restrictions(data: any) -> str | None:
 
 async def send_innertube_live_chat_message(
     cookie_string: str, video_id: str, message: str
-) -> None:
+) -> str:
     import hashlib
     import json
     import time
@@ -418,5 +432,8 @@ async def send_innertube_live_chat_message(
                         f"Comment sent, but YouTube returned action: {act_keys}. Message was not confirmed in chat.",
                         400,
                     )
+
+            updated_cookies = dict(client.cookies)
+            return _merge_cookies(cookie_string, updated_cookies)
     except httpx.RequestError as exc:
         raise YouTubeAPIError(f"Network error sending InnerTube message: {exc}", 503) from exc

@@ -251,14 +251,46 @@ async def google_callback(
 
 @router.post("/api/auth/cookie")
 async def save_cookie(
-    cookie: str = Form(...),
-    user: User = Depends(get_current_user),
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ):
-    from app.models import UserCookie
+    from app.models import BotJob, BotJobStatus, User, UserCookie
     from app.security import encrypt_text
 
-    text_val = cookie.strip()
+    cookie_val = None
+    is_json = False
+    data = {}
+    content_type = request.headers.get("content-type", "")
+    if "application/json" in content_type:
+        is_json = True
+        try:
+            data = await request.json()
+            cookie_val = data.get("cookie", "")
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid JSON payload")
+    else:
+        form = await request.form()
+        cookie_val = form.get("cookie", "")
+
+    user = await get_current_user_optional(request)
+    if not user:
+        if is_json and data.get("email"):
+            email_clean = data["email"].strip().lower()
+            u_res = await db.execute(select(User).where(User.email == email_clean))
+            user = u_res.scalar_one_or_none()
+        elif is_json:
+            u_res = await db.execute(select(User).order_by(User.id.asc()))
+            users = u_res.scalars().all()
+            if len(users) == 1:
+                user = users[0]
+
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="Not signed in. Please sign in to the web dashboard or provide your account email in the sync payload.",
+        )
+
+    text_val = (cookie_val or "").strip()
     if not text_val:
         raise HTTPException(status_code=400, detail="Cookie string cannot be empty")
 
@@ -278,6 +310,9 @@ async def save_cookie(
         if job.status == BotJobStatus.ERROR.value:
             job.status = BotJobStatus.STOPPED.value
     await db.commit()
+
+    if is_json or "application/json" in request.headers.get("accept", ""):
+        return {"ok": True, "message": "YouTube Cookie updated successfully", "user": user.email}
     return RedirectResponse("/", status_code=303)
 
 
