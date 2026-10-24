@@ -35,19 +35,28 @@ class Settings(BaseSettings):
     @field_validator("database_url", mode="before")
     @classmethod
     def normalize_database_url(cls, v: object) -> object:
-        if not isinstance(v, str):
-            return v
-        url = v
+        if not v or not isinstance(v, str) or not v.strip():
+            return "sqlite+aiosqlite:///./comment_bot.db"
+        url = v.strip()
         if url.startswith("postgres://"):
             url = "postgresql+asyncpg://" + url[len("postgres://") :]
         elif url.startswith("postgresql://") and "+asyncpg" not in url and "+psycopg" not in url:
             url = "postgresql+asyncpg://" + url[len("postgresql://") :]
-        # Strip libpq / DSN ssl query params so asyncpg relies on connect_args
+        # Strip libpq / DSN ssl and auth query params so asyncpg relies on connect_args
         from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
         parsed = urlparse(url)
         if parsed.query:
-            ssl_keys = {"ssl", "sslmode", "sslcert", "sslkey", "sslrootcert", "sslcrl", "sslpassword"}
+            ssl_keys = {
+                "ssl",
+                "sslmode",
+                "sslcert",
+                "sslkey",
+                "sslrootcert",
+                "sslcrl",
+                "sslpassword",
+                "channel_binding",
+            }
             qs = [(k, val) for k, val in parse_qsl(parsed.query, keep_blank_values=True) if k.lower() not in ssl_keys]
             url = urlunparse(parsed._replace(query=urlencode(qs)))
         return url

@@ -1,12 +1,7 @@
 # Render Blueprint: https://render.com/docs/blueprint-spec
-# After deploy, set APP_URL to your service URL (https://comment-bot-xxxx.onrender.com)
-# and add the same URL + /auth/google/callback in Google Cloud OAuth.
-
-databases:
-  - name: comment-bot-db
-    plan: free
-    databaseName: comment_bot
-    user: comment_bot
+# Note: Render free Postgres databases expire after 30 days.
+# To keep this 100% free forever without paid upgrades, use a free cloud Postgres provider
+# (e.g. Neon.tech or Supabase.com) and set DATABASE_URL in Environment, or leave unset for SQLite.
 
 services:
   - type: web
@@ -18,9 +13,7 @@ services:
     autoDeploy: true
     envVars:
       - key: DATABASE_URL
-        fromDatabase:
-          name: comment-bot-db
-          property: connectionString
+        sync: false
       - key: APP_URL
         sync: false
       - key: SECRET_KEY

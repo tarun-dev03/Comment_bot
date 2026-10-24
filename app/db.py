@@ -17,13 +17,15 @@ class Base(DeclarativeBase):
 
 
 def _postgres_connect_args(database_url: str) -> dict:
-    """Render Postgres uses TLS with a self-signed cert; do not verify it."""
+    """Render / Neon / Supabase Postgres uses TLS; do not verify self-signed certs.
+    Disable statement cache so asyncpg works with transaction poolers (Neon, PgBouncer, Supabase).
+    """
     if not database_url.startswith("postgresql"):
         return {}
     ctx = ssl.create_default_context()
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE
-    return {"ssl": ctx}
+    return {"ssl": ctx, "statement_cache_size": 0}
 
 
 settings = get_settings()

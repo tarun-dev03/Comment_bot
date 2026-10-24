@@ -29,14 +29,25 @@ def test_normalize_database_url_strips_ssl_params():
     from app.config import Settings
     from app.db import _postgres_connect_args
 
-    raw_url = "postgres://user:pass@host:5432/dbname?ssl=true&sslmode=require"
+    raw_url = "postgres://user:pass@host:5432/dbname?ssl=true&sslmode=require&channel_binding=require"
     s = Settings(database_url=raw_url)
     assert s.database_url == "postgresql+asyncpg://user:pass@host:5432/dbname"
 
     args = _postgres_connect_args(s.database_url)
     assert "ssl" in args
+    assert args["statement_cache_size"] == 0
     assert args["ssl"].check_hostname is False
     assert args["ssl"].verify_mode == 0
+
+
+def test_empty_database_url_fallback_to_sqlite():
+    from app.config import Settings
+    from app.db import _postgres_connect_args
+
+    for empty_val in ["", "   ", None]:
+        s = Settings(database_url=empty_val)
+        assert s.database_url == "sqlite+aiosqlite:///./comment_bot.db"
+        assert _postgres_connect_args(s.database_url) == {}
 
 
 def test_custom_phrases_randomness_and_uniqueness():

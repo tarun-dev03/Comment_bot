@@ -79,13 +79,26 @@ async def home(
     db_error = getattr(request.app.state, "db_error", None)
     if db_error:
         return HTMLResponse(
-            f"""<!DOCTYPE html><html><body style="font-family:sans-serif;padding:2rem;max-width:640px;">
-            <h1>Comment Bot — setup error</h1>
-            <p>Database connection failed. Login cannot work until this is fixed.</p>
-            <pre style="background:#eee;padding:1rem;overflow:auto;">{db_error}</pre>
-            <p><b>Render:</b> Environment → link <code>DATABASE_URL</code> to Postgres
-            <code>comment-bot-db</code> → Save → Manual Deploy.</p>
-            <p>Use the exact URL shown on your Render service page (top of dashboard).</p>
+            f"""<!DOCTYPE html><html><head><meta charset="utf-8"><title>Comment Bot — Database Setup</title></head>
+            <body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;padding:2rem;max-width:720px;margin:0 auto;line-height:1.6;color:#1e293b;">
+            <h1 style="color:#e11d48;margin-bottom:0.5rem;">Database Connection Error</h1>
+            <p>The database is currently unreachable. If your free Render PostgreSQL database expired (Render free databases expire after 30 days), you do <b>not</b> need to pay for premium!</p>
+            <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:1rem;margin:1rem 0;">
+                <b style="color:#991b1b;">Error details:</b>
+                <pre style="background:#fff;padding:0.75rem;border-radius:6px;overflow:auto;font-size:0.875rem;margin-top:0.5rem;color:#b91c1c;">{db_error}</pre>
+            </div>
+            <h3>How to fix this for FREE:</h3>
+            <ol style="padding-left:1.25rem;">
+                <li style="margin-bottom:0.75rem;">
+                    <b>Option 1: Free permanent cloud Postgres (Recommended)</b><br>
+                    Create a free Postgres database on <a href="https://neon.tech" target="_blank" style="color:#2563eb;">Neon.tech</a> (free forever, 0.5 GB, 30s setup, no credit card required).<br>
+                    Copy the connection string, go to your Render Web Service &rarr; <b>Environment</b> &rarr; set <code>DATABASE_URL</code> to the Neon URL &rarr; Save Changes.
+                </li>
+                <li style="margin-bottom:0.75rem;">
+                    <b>Option 2: Local SQLite</b><br>
+                    In your Render Web Service &rarr; <b>Environment</b> &rarr; remove <code>DATABASE_URL</code> or set it to <code>sqlite+aiosqlite:///./comment_bot.db</code> &rarr; Save Changes.
+                </li>
+            </ol>
             </body></html>""",
             status_code=503,
         )
