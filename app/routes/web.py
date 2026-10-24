@@ -354,17 +354,23 @@ async def api_start_bot(
         from app.models import UserCookie
         c_res = await db.execute(select(UserCookie).where(UserCookie.user_id == user.id))
         if not c_res.scalar_one_or_none():
-            raise HTTPException(status_code=400, detail="Save your YouTube Cookie in dashboard settings first.")
-    else:
+            # If no cookie exists but Google OAuth is connected, gracefully fall back to OAuth!
+            oauth_check = await db.execute(select(OAuthToken).where(OAuthToken.user_id == user.id))
+            if oauth_check.scalar_one_or_none():
+                mode = "oauth"
+            else:
+                raise HTTPException(status_code=400, detail="Connect Google/YouTube first (tap Connect Google above).")
+
+    if mode == "oauth":
         result = await db.execute(select(OAuthToken).where(OAuthToken.user_id == user.id))
         if not result.scalar_one_or_none():
-            raise HTTPException(status_code=400, detail="Connect Google/YouTube first (or switch to YouTube Cookie mode)")
+            raise HTTPException(status_code=400, detail="Connect Google/YouTube first (tap Connect Google above).")
 
         from app.auth.google_oauth import get_access_token_for_user
 
         access = await get_access_token_for_user(db, user.id)
         if not access:
-            raise HTTPException(status_code=400, detail="Could not refresh YouTube token")
+            raise HTTPException(status_code=400, detail="Could not refresh YouTube token. Tap Reconnect Google.")
 
         try:
             live_chat_id, title = await fetch_live_chat_id(access, video_id)

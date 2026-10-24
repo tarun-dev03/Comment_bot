@@ -29,13 +29,33 @@ async def _load_custom_phrases(db: AsyncSession, user_id: int) -> list[str]:
     return [row[0] for row in result.all()]
 
 
+async def _keep_alive_ping() -> None:
+    """Send periodic health ping to keep Render web container awake while bot is running."""
+    settings = get_settings()
+    app_url = (settings.app_url or "").rstrip("/")
+    if app_url.startswith("http://") or app_url.startswith("https://"):
+        try:
+            import httpx
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                await client.get(f"{app_url}/health")
+        except Exception:
+            pass
+
+
 async def _bot_loop(user_id: int) -> None:
     stop_event = _stop_flags[user_id]
     consecutive_errors = 0
     max_consecutive_transient_errors = 5
+    last_keepalive = 0.0
 
     try:
         while not stop_event.is_set():
+            import time
+            now_ts = time.time()
+            if now_ts - last_keepalive > 480:  # ping every 8 mins to prevent Render sleep
+                last_keepalive = now_ts
+                asyncio.create_task(_keep_alive_ping())
+
             async with async_session_factory() as db:
                 result = await db.execute(select(BotJob).where(BotJob.user_id == user_id))
                 job = result.scalar_one_or_none()

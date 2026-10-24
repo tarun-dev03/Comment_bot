@@ -16,57 +16,42 @@
   <p class="muted">Share this app URL so others can sign in with their own Google account.</p>
 </section>
 
-<section class="card">
-  <h2>Alternative: Unlimited YouTube Web Cookie Mode (100% Quota-Free)</h2>
-  <p class="muted">Bypasses the 50 comments/day YouTube Data API limit completely using your YouTube browser session.</p>
-  {% if has_cookie %}
-  <p class="success">✓ YouTube Web Cookie saved and ready for unlimited commenting.</p>
-  {% endif %}
-  <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:6px; padding:0.6rem 0.8rem; font-size:0.85rem; color:#1e40af; line-height:1.4; margin-bottom: 0.8rem;">
-    <strong>🤖 Automatic Auto-Sync Available:</strong> Don't want to copy cookies manually? Load the included browser extension from the <code>extension/</code> folder in Chrome/Edge/Brave. It automatically fetches and syncs your YouTube cookies every 10–15 minutes in the background!
-  </div>
-  <form method="post" action="/api/auth/cookie" class="stack">
-    <label for="cookie">Paste YouTube Cookie Header (or sync automatically via extension)</label>
-    <div style="background:#f1f5f9; border:1px solid #cbd5e1; border-radius:6px; padding:0.6rem 0.8rem; font-size:0.8rem; color:#334155; line-height:1.5;">
-      <strong>⚠️ How to copy the complete cookie:</strong><br>
-      1. Open <a href="https://www.youtube.com" target="_blank" rel="noopener">youtube.com</a> in Chrome/Edge/Firefox while logged in.<br>
-      2. Press <code>F12</code> (or right-click → <em>Inspect</em>) and open the <strong>Network</strong> tab.<br>
-      3. Refresh the page or click any video.<br>
-      4. In the Network list, click any request to <code>youtube.com</code>.<br>
-      5. Under <strong>Headers</strong> → <strong>Request Headers</strong>, find <code>Cookie:</code> → right-click and choose <strong>Copy value</strong>.<br>
-      <span style="color:#b91c1c;"><em>Note: Do not use Console (<code>document.cookie</code>) — it lacks HttpOnly cookies (HSID/SSID) required by YouTube.</em></span>
-    </div>
-    <textarea id="cookie" name="cookie" rows="3" placeholder="{% if has_cookie %}●●●●●●●● (YouTube cookie is saved and active. Paste here only to update or replace it){% else %}e.g. VISITOR_INFO1_LIVE=...; SID=...; HSID=...; SSID=...; SAPISID=...; LOGIN_INFO=...{% endif %}" required style="width:100%; border-radius:6px; padding:0.5rem; border:1px solid #ccc; font-family:monospace; font-size:0.8rem;"></textarea>
-    <button type="submit" class="btn btn-ghost">{% if has_cookie %}Update YouTube Cookie{% else %}Save YouTube Cookie{% endif %}</button>
-  </form>
-</section>
-
 {% if not oauth and not has_cookie %}
-<section class="card">
-  <h2>Connect YouTube</h2>
-  <p>Grant YouTube access via Google OAuth or save your YouTube Cookie above.</p>
-  <a class="btn btn-primary" href="/auth/google/start">Connect Google</a>
+<section class="card" style="border-left: 4px solid #3b82f6;">
+  <h2>📱 Connect YouTube (No Cookies Needed)</h2>
+  <p>To comment automatically from your mobile phone or laptop without any cookies, connect your Google account once:</p>
+  <a class="btn btn-primary" href="/auth/google/start" style="font-size:1.05rem; padding: 0.75rem 1.25rem;">🔑 Connect Google / YouTube</a>
 </section>
 {% else %}
-<section class="card">
-  <p class="success">
-    {% if oauth %}YouTube OAuth connected{% if oauth.google_email %} as {{ oauth.google_email }}{% endif %}.{% endif %}
-    {% if has_cookie %} (Cookie mode available){% endif %}
-  </p>
-  {% if oauth %}<a class="btn btn-ghost" href="/auth/google/start">Reconnect Google</a>{% endif %}
+<section class="card" style="background: #f0fdf4; border: 1px solid #bbf7d0;">
+  <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+    <div>
+      <strong style="color:#166534;">✓ YouTube Connected</strong>
+      {% if oauth and oauth.google_email %}<span class="muted">({{ oauth.google_email }})</span>{% endif %}
+      <p style="margin:0.25rem 0 0; font-size:0.875rem; color:#15803d;">Ready to comment automatically from mobile without any cookies!</p>
+    </div>
+    {% if oauth %}<a class="btn btn-ghost" href="/auth/google/start" style="font-size:0.8rem; padding:0.4rem 0.75rem;">Reconnect Google</a>{% endif %}
+  </div>
 </section>
 {% endif %}
 
 <section class="card">
   <h2>Live stream bot runner</h2>
+  <p class="muted" style="font-size:0.85rem; margin-top:-0.5rem; margin-bottom:1rem;">
+    📱 <strong>Mobile Note:</strong> You can start the bot and lock your phone or close this page. The bot runs automatically in the cloud on Render!
+  </p>
   <form id="start-form" class="stack">
     <label for="stream_url">YouTube live stream URL</label>
-    <input id="stream_url" name="stream_url" type="url" placeholder="https://www.youtube.com/watch?v=..." value="{{ job.stream_url if job else '' }}">
+    <input id="stream_url" name="stream_url" type="url" placeholder="https://www.youtube.com/watch?v=..." value="{{ job.stream_url if job else '' }}" required>
     
-    <label for="mode">Commenting Method / Engine</label>
+    <label for="mode">Commenting Engine</label>
     <select id="mode" name="mode" style="padding: 0.6rem; border-radius: 6px; border: 1px solid #ccc;">
-      <option value="cookie" {% if job and job.mode == 'cookie' %}selected{% elif has_cookie %}selected{% endif %}>⚡ YouTube Web Cookie Mode (100% Quota-Free / Unlimited Comments)</option>
-      <option value="oauth" {% if job and job.mode == 'oauth' %}selected{% elif not has_cookie and oauth %}selected{% endif %}>🔑 Google OAuth API Mode (Subject to 50 msg/day YouTube API Quota)</option>
+      {% if has_cookie %}
+      <option value="cookie" {% if job and job.mode == 'cookie' %}selected{% endif %}>⚡ YouTube Web Cookie Mode (100% Quota-Free / Unlimited Comments)</option>
+      <option value="oauth" {% if not job or job.mode == 'oauth' %}selected{% endif %}>🔑 Google OAuth API Mode (Mobile Ready — No Cookies Needed)</option>
+      {% else %}
+      <option value="oauth" selected>🔑 Google OAuth API Mode (Mobile Ready — No Cookies Needed)</option>
+      {% endif %}
     </select>
 
     <label for="interval_seconds">Comment interval (frequency)</label>
@@ -89,6 +74,24 @@
     {% include "partials/status.html" %}
   </div>
 </section>
+
+<details class="card" style="cursor:pointer;" {% if has_cookie %}open{% endif %}>
+  <summary style="font-weight:600; color:#334155;">⚡ Desktop Option: Unlimited YouTube Web Cookie Mode (Quota-Free)</summary>
+  <div style="margin-top:1rem; cursor:default;">
+    <p class="muted">Bypasses the daily YouTube API limits completely using a desktop browser session.</p>
+    {% if has_cookie %}
+    <p class="success">✓ YouTube Web Cookie is active and saved on your account.</p>
+    {% endif %}
+    <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:6px; padding:0.6rem 0.8rem; font-size:0.85rem; color:#1e40af; line-height:1.4; margin-bottom: 0.8rem;">
+      <strong>🤖 Automatic Sync:</strong> Load the included extension from the <code>extension/</code> folder in Chrome/Edge on your PC. Once synced from desktop, your phone can use Cookie Mode too!
+    </div>
+    <form method="post" action="/api/auth/cookie" class="stack">
+      <label for="cookie">Paste YouTube Cookie Header (from Desktop DevTools F12)</label>
+      <textarea id="cookie" name="cookie" rows="3" placeholder="{% if has_cookie %}●●●●●●●● (YouTube cookie is saved. Paste here only to update){% else %}e.g. VISITOR_INFO1_LIVE=...; SID=...; HSID=...; SSID=...; SAPISID=...; LOGIN_INFO=...{% endif %}" required style="width:100%; border-radius:6px; padding:0.5rem; border:1px solid #ccc; font-family:monospace; font-size:0.8rem;"></textarea>
+      <button type="submit" class="btn btn-ghost">{% if has_cookie %}Update YouTube Cookie{% else %}Save YouTube Cookie{% endif %}</button>
+    </form>
+  </div>
+</details>
 
 <section class="card">
   <h2>Your phrases (optional)</h2>
