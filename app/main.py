@@ -29,6 +29,18 @@ async def lifespan(app: FastAPI):
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(title="YouTube Live Comment Bot", lifespan=lifespan)
+
+
+@app.middleware("http")
+async def add_no_cache_for_static(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origin_regex=r"^chrome-extension://.*|^moz-extension://.*|http://localhost.*|http://127\.0\.0\.1.*",
