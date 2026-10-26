@@ -200,6 +200,22 @@
   </div>
 
   <div class="field">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <label for="stream-url" style="margin-bottom:0;">Live Stream URL (Kept until updated)</label>
+      <span id="link-save-badge" class="muted" style="font-size:10px; color:#10b981; display:none;">✓ Saved</span>
+    </div>
+    <input type="url" id="stream-url" placeholder="https://www.youtube.com/watch?v=..." style="margin-top:4px;">
+    <div style="display:flex; gap:6px; margin-top:6px;">
+      <button type="button" id="btn-use-tab" class="btn" style="flex:1; padding:6px 8px; font-size:11px; background:#334155;">
+        🎯 Use Active Tab
+      </button>
+      <button type="button" id="btn-save-link" class="btn" style="flex:1; padding:6px 8px; font-size:11px; background:#047857;">
+        💾 Save Link
+      </button>
+    </div>
+  </div>
+
+  <div class="field">
     <label for="sync-interval">Auto-Sync Interval</label>
     <select id="sync-interval">
       <option value="10">Every 10 minutes</option>

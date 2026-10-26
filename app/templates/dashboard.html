@@ -1,157 +1,761 @@
 {% extends "base.html" %}
-{% block title %}Dashboard — Comment Bot{% endblock %}
+{% block title %}Comment Bot — YouTube Live Automator{% endblock %}
 {% block content %}
 {% if not user %}
-<section class="card">
-  <h1>Welcome</h1>
-  <p>Sign in with Google to comment on a live stream — no email confirmation.</p>
-  <a class="btn btn-primary" href="/auth/google/login">Sign in with Google</a>
+<section class="card" style="text-align:center; padding: 2.5rem 1.5rem;">
+  <div style="width: 56px; height: 56px; border-radius: 16px; background: var(--yt-red-gradient); display: inline-flex; align-items: center; justify-content: center; margin-bottom: 1rem; box-shadow: 0 0 24px rgba(255, 0, 51, 0.45);">
+    <svg width="32" height="32" viewBox="0 0 24 24" fill="#fff">
+      <path d="M19.615 3.184c-3.604-.246-11.631-.245-15.23 0-3.897.266-4.356 2.62-4.385 8.816.029 6.185.484 8.549 4.385 8.816 3.6.245 11.626.246 15.23 0 3.897-.266 4.356-2.62 4.385-8.816-.029-6.185-.484-8.549-4.385-8.816zm-10.615 12.816v-8l8 3.993-8 4.007z"/>
+    </svg>
+  </div>
+  <h1 style="font-size: 1.6rem; font-weight: 800; margin-bottom: 0.5rem; letter-spacing: -0.02em;">Welcome to Comment Bot</h1>
+  <p class="muted" style="max-width: 480px; margin: 0 auto 1.5rem; font-size: 0.95rem;">
+    Automate live stream comments on YouTube with zero limits. Works 24/7 in the cloud on desktop or mobile.
+  </p>
+  <div style="display:flex; justify-content:center; gap:0.75rem; flex-wrap:wrap;">
+    <a class="btn btn-primary" href="/auth/google/login" style="font-size:1rem; padding: 0.85rem 1.75rem;">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M12.24 10.285V13.4h6.887C18.2 16.14 15.645 18 12.24 18c-3.315 0-6-2.685-6-6s2.685-6 6-6c1.47 0 2.805.54 3.84 1.425l2.4-2.4C16.89 3.51 14.7 2.6 12.24 2.6 7.02 2.6 2.8 6.82 2.8 12.04s4.22 9.44 9.44 9.44c5.445 0 9.1-3.825 9.1-9.28 0-.645-.06-1.26-.18-1.84h-8.92z"/>
+      </svg>
+      <span>Sign in with Google</span>
+    </a>
+  </div>
   {% if settings.email_login_enabled %}
-  <p class="muted" style="margin-top:1rem;"><a href="/login">Use email magic link instead</a></p>
+  <p class="muted" style="margin-top:1.25rem; font-size: 0.82rem;">
+    <a href="/login" style="color:#94a3b8; text-decoration: underline;">Use email magic link instead</a>
+  </p>
   {% endif %}
 </section>
 {% else %}
-<section class="card">
-  <h1>Hello, {{ user.email }}</h1>
-  <p class="muted">Share this app URL so others can sign in with their own Google account.</p>
-</section>
 
-{% if not oauth and not has_cookie %}
-<section class="card" style="border-left: 4px solid #3b82f6;">
-  <h2>📱 Connect YouTube (No Cookies Needed)</h2>
-  <p>To comment automatically from your mobile phone or laptop without any cookies, connect your Google account once:</p>
-  <a class="btn btn-primary" href="/auth/google/start" style="font-size:1.05rem; padding: 0.75rem 1.25rem;">🔑 Connect Google / YouTube</a>
-</section>
-{% else %}
-<section class="card" style="background: #f0fdf4; border: 1px solid #bbf7d0;">
-  <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
-    <div>
-      <strong style="color:#166534;">✓ YouTube Connected</strong>
-      {% if oauth and oauth.google_email %}<span class="muted">({{ oauth.google_email }})</span>{% endif %}
-      <p style="margin:0.25rem 0 0; font-size:0.875rem; color:#15803d;">Ready to comment automatically from mobile without any cookies!</p>
-    </div>
-    {% if oauth %}<a class="btn btn-ghost" href="/auth/google/start" style="font-size:0.8rem; padding:0.4rem 0.75rem;">Reconnect Google</a>{% endif %}
+<!-- Live Stats Overview -->
+<div class="stats-grid">
+  <div class="stat-box">
+    <span class="stat-label">Total Sent</span>
+    <span id="stat-total" class="stat-value">{{ job.messages_sent if job else 0 }}</span>
+    <span class="stat-sub">Lifetime comments</span>
   </div>
-</section>
-{% endif %}
+  <div class="stat-box">
+    <span class="stat-label">Today's Activity</span>
+    <span id="stat-today" class="stat-value">{{ job.messages_sent_today if job else 0 }}</span>
+    <span id="stat-quota-badge" class="stat-sub">{% if job and job.mode == 'cookie' %}Unlimited (Cookie){% else %}API quota ~50/day{% endif %}</span>
+  </div>
+  <div class="stat-box">
+    <span class="stat-label">Engine Mode</span>
+    <span id="stat-mode" class="stat-value" style="font-size: 1.1rem; text-transform: uppercase;">{{ job.mode if job else ('cookie' if has_cookie else 'oauth') }}</span>
+    <span id="stat-mode-sub" class="stat-sub">{% if has_cookie %}Web Cookie active{% elif oauth %}Google OAuth{% else %}Pending setup{% endif %}</span>
+  </div>
+  <div class="stat-box">
+    <span class="stat-label">Interval</span>
+    <span id="stat-interval" class="stat-value">{{ job.interval_seconds if job else 30 }}s</span>
+    <span id="stat-rate" class="stat-sub">~{{ (3600 / (job.interval_seconds if job and job.interval_seconds else 30)) | round | int }}/hour</span>
+  </div>
+</div>
 
-<section class="card">
-  <h2>Live stream bot runner</h2>
-  <p class="muted" style="font-size:0.85rem; margin-top:-0.5rem; margin-bottom:1rem;">
-    📱 <strong>Mobile Note:</strong> You can start the bot and lock your phone or close this page. The bot runs automatically in the cloud on Render!
-  </p>
-  <form id="start-form" class="stack">
-    <label for="stream_url">YouTube live stream URL</label>
-    <input id="stream_url" name="stream_url" type="url" placeholder="https://www.youtube.com/watch?v=..." value="{{ job.stream_url if job else '' }}" required>
-    
-    <label for="mode">Commenting Engine</label>
-    <select id="mode" name="mode" style="padding: 0.6rem; border-radius: 6px; border: 1px solid #ccc;">
-      {% if has_cookie %}
-      <option value="cookie" {% if job and job.mode == 'cookie' %}selected{% endif %}>⚡ YouTube Web Cookie Mode (100% Quota-Free / Unlimited Comments)</option>
-      <option value="oauth" {% if not job or job.mode == 'oauth' %}selected{% endif %}>🔑 Google OAuth API Mode (Mobile Ready — No Cookies Needed)</option>
-      {% else %}
-      <option value="oauth" selected>🔑 Google OAuth API Mode (Mobile Ready — No Cookies Needed)</option>
-      {% endif %}
-    </select>
+<!-- Main Controller: Live Stream Bot Runner -->
+<section class="card" style="position:relative; overflow:hidden;">
+  <div class="card-header-row">
+    <div>
+      <h2 class="card-title">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="#ff0033">
+          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14.5v-9l6 4.5-6 4.5z"/>
+        </svg>
+        <span>Live Stream Bot Runner</span>
+      </h2>
+      <p class="card-subtitle" style="margin: 0.25rem 0 0;">
+        📱 <strong>Mobile Ready:</strong> Start the bot and lock your phone or close the browser — runs non-stop in the cloud!
+      </p>
+    </div>
+    <div id="runner-badge" class="status-chip idle">
+      <span class="status-dot"></span>
+      <span id="runner-badge-text">Idle</span>
+    </div>
+  </div>
 
-    <label for="interval_seconds">Comment interval (frequency)</label>
-    <select id="interval_seconds" name="interval_seconds" style="padding: 0.6rem; border-radius: 6px; border: 1px solid #ccc;">
-      <option value="5" {% if job and job.interval_seconds == 5 %}selected{% endif %}>⚡ 5 seconds (~720/hr - Ultra Fast)</option>
-      <option value="10" {% if job and job.interval_seconds == 10 %}selected{% endif %}>🔥 10 seconds (~360/hr - Very Fast)</option>
-      <option value="15" {% if job and job.interval_seconds == 15 %}selected{% endif %}>15 seconds (~240/hr - Fast continuous)</option>
-      <option value="30" {% if not job or job.interval_seconds == 30 %}selected{% endif %}>30 seconds (~120/hr - Standard)</option>
-      <option value="60" {% if job and job.interval_seconds == 60 %}selected{% endif %}>60 seconds (1 min - Recommended)</option>
-      <option value="120" {% if job and job.interval_seconds == 120 %}selected{% endif %}>120 seconds (2 mins)</option>
-      <option value="300" {% if job and job.interval_seconds == 300 %}selected{% endif %}>300 seconds (5 mins)</option>
-    </select>
+  <form id="start-form" class="stack" onsubmit="event.preventDefault();">
+    <!-- Stream URL Input -->
+    <div class="form-group">
+      <div class="field-label">
+        <label for="stream_url">Target YouTube Live Stream URL</label>
+        <span id="save-indicator" style="font-size:0.75rem; color:#10b981; font-weight:700; opacity:0; transition:opacity 0.3s ease;">✓ Kept & saved permanently</span>
+      </div>
+      <div class="input-with-actions input-icon-wrapper has-prefix">
+        <span class="input-prefix-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="#ff0033">
+            <path d="M10 15l5.19-3L10 9v6m11.56-7.83c.13.47.22 1.1.28 1.9.07.8.1 1.49.1 2.09L22 12c0 2.19-.16 3.8-.44 4.83-.25.9-.83 1.48-1.73 1.73-.47.13-1.33.22-2.65.28-1.3.07-2.49.1-3.59.1L12 19c-4.19 0-6.8-.16-7.83-.44-.9-.25-1.48-.83-1.73-1.73-.13-.47-.22-1.1-.28-1.9-.07-.8-.1-1.49-.1-2.09L2 12c0-2.19.16-3.8.44-4.83.25-.9.83-1.48 1.73-1.73.47-.13 1.33-.22 2.65-.28 1.3-.07 2.49-.1 3.59-.1L12 5c4.19 0 6.8.16 7.83.44.9.25 1.48.83 1.73 1.73z"/>
+          </svg>
+        </span>
+        <input id="stream_url" name="stream_url" type="url" placeholder="Paste link: https://www.youtube.com/watch?v=... or https://youtube.com/live/..." value="{{ job.stream_url if job and job.stream_url else '' }}" required autocomplete="off">
+        <button type="button" id="btn-paste-link" class="btn btn-ghost btn-sm" title="Paste from clipboard" style="padding: 0.5rem 0.75rem;">
+          📋 Paste
+        </button>
+        <button type="button" id="btn-save-link" class="btn btn-ghost btn-sm" title="Save this link permanently until updated" style="border-color: rgba(255,255,255,0.2);">
+          💾 Save
+        </button>
+      </div>
 
-    <div class="row">
-      <button type="button" id="btn-start" class="btn btn-primary">Start bot</button>
-      <button type="button" id="btn-stop" class="btn btn-danger">Stop</button>
+      <!-- Live Video Card Preview -->
+      <div id="video-preview-box" class="video-preview-card">
+        <img id="video-preview-thumb" src="" alt="Live Stream Thumbnail" class="video-thumb">
+        <div class="video-info">
+          <span class="video-title" id="video-preview-title">Detected YouTube Stream</span>
+          <div class="video-meta">
+            <span>Video ID:</span>
+            <span class="video-pill" id="video-preview-id">--------</span>
+            <a id="video-preview-link" href="#" target="_blank" rel="noreferrer" style="color: #60a5fa; text-decoration: none; margin-left: auto;">
+              Open Stream ↗
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Engine Mode Selection -->
+    <div class="form-group">
+      <label class="field-label">Commenting Engine Mode</label>
+      <input type="hidden" id="mode" name="mode" value="{{ job.mode if job and job.mode else ('cookie' if has_cookie else 'oauth') }}">
+      
+      <div class="engine-options">
+        <div id="engine-cookie" class="engine-card {% if (job and job.mode == 'cookie') or (not job and has_cookie) %}active{% endif %}" onclick="selectMode('cookie')">
+          <span class="engine-card-icon">⚡</span>
+          <div class="engine-card-content">
+            <div class="engine-card-title">
+              <span>Web Cookie Mode</span>
+              <span class="engine-card-badge badge-green">Unlimited 🎉</span>
+            </div>
+            <p class="engine-card-desc">100% quota-free. Sends unlimited comments using your desktop browser session cookies.</p>
+          </div>
+        </div>
+
+        <div id="engine-oauth" class="engine-card {% if (job and job.mode == 'oauth') or (not job and not has_cookie) %}active{% endif %}" onclick="selectMode('oauth')">
+          <span class="engine-card-icon">🔑</span>
+          <div class="engine-card-content">
+            <div class="engine-card-title">
+              <span>Google OAuth API</span>
+              <span class="engine-card-badge badge-blue">Official</span>
+            </div>
+            <p class="engine-card-desc">Runs directly from the cloud without needing any cookies. Subject to standard YouTube API limits.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Frequency Preset Selector -->
+    <div class="form-group">
+      <div class="field-label">
+        <span>Comment Frequency (Interval)</span>
+        <span class="muted" id="interval-label-hint">Every 30 seconds</span>
+      </div>
+      <input type="hidden" id="interval_seconds" name="interval_seconds" value="{{ job.interval_seconds if job and job.interval_seconds else 30 }}">
+      
+      <div class="presets-row">
+        <button type="button" class="preset-chip {% if job and job.interval_seconds == 5 %}active{% endif %}" data-val="5">⚡ 5s (Ultra)</button>
+        <button type="button" class="preset-chip {% if job and job.interval_seconds == 10 %}active{% endif %}" data-val="10">🔥 10s (Fast)</button>
+        <button type="button" class="preset-chip {% if job and job.interval_seconds == 15 %}active{% endif %}" data-val="15">15s (~240/hr)</button>
+        <button type="button" class="preset-chip {% if (not job and 30 == 30) or (job and job.interval_seconds == 30) %}active{% endif %}" data-val="30">30s (Standard)</button>
+        <button type="button" class="preset-chip {% if job and job.interval_seconds == 60 %}active{% endif %}" data-val="60">60s (1 min)</button>
+        <button type="button" class="preset-chip {% if job and job.interval_seconds == 120 %}active{% endif %}" data-val="120">120s (2 min)</button>
+        <button type="button" class="preset-chip {% if job and job.interval_seconds == 300 %}active{% endif %}" data-val="300">300s (5 min)</button>
+      </div>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="actions-row">
+      <button type="button" id="btn-start" class="btn btn-primary btn-start-bot">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M8 5v14l11-7z"/>
+        </svg>
+        <span>Start Bot</span>
+      </button>
+
+      <button type="button" id="btn-stop" class="btn btn-stop-bot">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M6 6h12v12H6z"/>
+        </svg>
+        <span>Stop</span>
+      </button>
+
+      <button type="button" id="btn-test-comment" class="btn btn-ghost" title="Generate a live test comment from your phrase pool" style="font-size: 0.85rem;">
+        🎲 Test Comment
+      </button>
     </div>
   </form>
-  <div id="bot-status" class="status-panel" hx-get="/api/bots/status" hx-trigger="load, every 3s" hx-swap="innerHTML">
-    {% include "partials/status.html" %}
+
+  <!-- Live Status & Activity Monitor -->
+  <div class="status-panel-wrapper">
+    <div class="status-panel-header">
+      <span style="display:flex; align-items:center; gap:0.4rem;">
+        <span class="status-dot" id="monitor-pulse-dot" style="background:#94a3b8; width:7px; height:7px; border-radius:50%;"></span>
+        <span>Live Runner Status</span>
+      </span>
+      <span id="bot-elapsed-time" style="font-family:'JetBrains Mono', monospace; color:#34d399;">Idle</span>
+    </div>
+    <div id="bot-status" class="status-panel-content">
+      <dl class="status-dl">
+        <dt>State</dt>
+        <dd id="stat-state-text">{{ 'Running' if running else (job.status if job else 'stopped') }}</dd>
+        <dt>Method</dt>
+        <dd id="stat-method-text">{{ '⚡ Web Cookie (Quota-Free Unlimited)' if (job and job.mode == 'cookie') else '🔑 Google OAuth API' }}</dd>
+        <dt>Messages sent</dt>
+        <dd id="stat-sent-text">{{ job.messages_sent if job else 0 }}</dd>
+        <dt>Last activity</dt>
+        <dd id="stat-last-time">None</dd>
+        <dt id="dt-err" style="display:none;" class="error-val">Notice</dt>
+        <dd id="dd-err" style="display:none;" class="error-val"></dd>
+      </dl>
+    </div>
   </div>
 </section>
 
-<details class="card" style="cursor:pointer;" {% if has_cookie %}open{% endif %}>
-  <summary style="font-weight:600; color:#334155;">⚡ Desktop Option: Unlimited YouTube Web Cookie Mode (Quota-Free)</summary>
-  <div style="margin-top:1rem; cursor:default;">
-    <p class="muted">Bypasses the daily YouTube API limits completely using a desktop browser session.</p>
-    {% if has_cookie %}
-    <p class="success">✓ YouTube Web Cookie is active and saved on your account.</p>
-    {% endif %}
-    <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:6px; padding:0.6rem 0.8rem; font-size:0.85rem; color:#1e40af; line-height:1.4; margin-bottom: 0.8rem;">
-      <strong>🤖 Automatic Sync:</strong> Load the included extension from the <code>extension/</code> folder in Chrome/Edge on your PC. Once synced from desktop, your phone can use Cookie Mode too!
+<!-- Credentials & Accounts Overview Card -->
+<section class="card conn-card {% if oauth or has_cookie %}active{% endif %}">
+  <div class="card-header-row">
+    <div>
+      <h2 class="card-title">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+          <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+        </svg>
+        <span>Connected Credentials</span>
+      </h2>
+      <p class="card-subtitle" style="margin: 0.25rem 0 0;">
+        Credentials are encrypted, retained forever, and auto-refreshed in the background.
+      </p>
+    </div>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 0.85rem;">
+    <!-- Google OAuth Account -->
+    <div style="background: rgba(10, 15, 26, 0.65); border: 1px solid rgba(255,255,255,0.08); border-radius: var(--radius-md); padding: 1rem;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
+        <span style="font-weight:700; font-size:0.9rem; display:flex; align-items:center; gap:0.4rem;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12.24 10.285V13.4h6.887C18.2 16.14 15.645 18 12.24 18c-3.315 0-6-2.685-6-6s2.685-6 6-6c1.47 0 2.805.54 3.84 1.425l2.4-2.4C16.89 3.51 14.7 2.6 12.24 2.6 7.02 2.6 2.8 6.82 2.8 12.04s4.22 9.44 9.44 9.44c5.445 0 9.1-3.825 9.1-9.28 0-.645-.06-1.26-.18-1.84h-8.92z"/>
+          </svg>
+          <span>Google YouTube API</span>
+        </span>
+        {% if oauth %}
+        <span class="engine-card-badge badge-green">✓ Active</span>
+        {% else %}
+        <span class="engine-card-badge" style="background:rgba(148,163,184,0.15); color:#94a3b8;">Not linked</span>
+        {% endif %}
+      </div>
+      <p class="muted" style="font-size:0.8rem; margin-bottom:0.85rem;">
+        {% if oauth and oauth.google_email %}
+        Linked to <strong>{{ oauth.google_email }}</strong>. Ready for cloud runner.
+        {% else %}
+        Link your Google account once for seamless API commenting from mobile.
+        {% endif %}
+      </p>
+      <a class="btn btn-ghost btn-sm" href="/auth/google/start" style="width:100%;">
+        {% if oauth %}🔄 Reconnect Google Account{% else %}🔑 Connect Google Account{% endif %}
+      </a>
+    </div>
+
+    <!-- YouTube Web Cookie -->
+    <div style="background: rgba(10, 15, 26, 0.65); border: 1px solid rgba(255,255,255,0.08); border-radius: var(--radius-md); padding: 1rem;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
+        <span style="font-weight:700; font-size:0.9rem; display:flex; align-items:center; gap:0.4rem;">
+          <span>⚡ YouTube Web Cookie</span>
+        </span>
+        {% if has_cookie %}
+        <span class="engine-card-badge badge-green">✓ Synced & Ready</span>
+        {% else %}
+        <span class="engine-card-badge" style="background:rgba(245,158,11,0.15); color:#fbbf24;">Action optional</span>
+        {% endif %}
+      </div>
+      <p class="muted" style="font-size:0.8rem; margin-bottom:0.85rem;">
+        {% if has_cookie %}
+        Active and saved. Enables 100% quota-free comments around the clock.
+        {% else %}
+        Auto-sync via the included Chrome extension for unlimited comments.
+        {% endif %}
+      </p>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="toggleCookieDetails()" style="width:100%;">
+        {% if has_cookie %}⚙️ Manage Cookie / Auto-Sync{% else %}➕ Setup Cookie Mode{% endif %}
+      </button>
+    </div>
+  </div>
+
+  <!-- Collapsible Cookie Management Box -->
+  <div id="cookie-manager-box" style="display:none; margin-top:1.25rem; padding-top:1rem; border-top:1px solid rgba(255,255,255,0.08);">
+    <div style="background:rgba(59,130,246,0.1); border:1px solid rgba(59,130,246,0.25); border-radius:var(--radius-sm); padding:0.75rem 1rem; margin-bottom:1rem; font-size:0.82rem; color:#93c5fd; line-height:1.45;">
+      <strong>🤖 Chrome Extension Auto-Sync:</strong> Load the extension from the <code>extension/</code> folder in Chrome/Edge on your PC. It automatically refreshes and syncs your cookies every 15 minutes!
     </div>
     <form method="post" action="/api/auth/cookie" class="stack">
-      <label for="cookie">Paste YouTube Cookie Header (from Desktop DevTools F12)</label>
-      <textarea id="cookie" name="cookie" rows="3" placeholder="{% if has_cookie %}●●●●●●●● (YouTube cookie is saved. Paste here only to update){% else %}e.g. VISITOR_INFO1_LIVE=...; SID=...; HSID=...; SSID=...; SAPISID=...; LOGIN_INFO=...{% endif %}" required style="width:100%; border-radius:6px; padding:0.5rem; border:1px solid #ccc; font-family:monospace; font-size:0.8rem;"></textarea>
-      <button type="submit" class="btn btn-ghost">{% if has_cookie %}Update YouTube Cookie{% else %}Save YouTube Cookie{% endif %}</button>
+      <label for="cookie" class="field-label">Manual Cookie Header Paste</label>
+      <textarea id="cookie" name="cookie" rows="3" placeholder="{% if has_cookie %}●●●●●●●● (YouTube cookie is saved and active. Paste here only to manually replace){% else %}e.g. VISITOR_INFO1_LIVE=...; SID=...; HSID=...; SSID=...; SAPISID=...; LOGIN_INFO=...{% endif %}" required></textarea>
+      <button type="submit" class="btn btn-ghost btn-sm" style="align-self:flex-start;">
+        {% if has_cookie %}Update YouTube Cookie{% else %}Save YouTube Cookie{% endif %}
+      </button>
     </form>
   </div>
-</details>
-
-<section class="card">
-  <h2>Your phrases (optional)</h2>
-  <p class="muted">Added to the built-in pool; the bot avoids repeating recent messages.</p>
-  <form method="post" action="/api/phrases" class="stack">
-    <input name="phrase" maxlength="200" placeholder="Add a custom comment..." required>
-    <button type="submit" class="btn btn-ghost">Add phrase</button>
-  </form>
-  {% if phrases %}
-  <ul class="phrase-list">
-    {% for p in phrases %}
-    <li>{{ p }}</li>
-    {% endfor %}
-  </ul>
-  {% endif %}
 </section>
 
+<!-- Custom Phrases Pool Manager -->
+<section class="card">
+  <div class="card-header-row">
+    <div>
+      <h2 class="card-title">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+        </svg>
+        <span>Comment Phrases Pool</span>
+      </h2>
+      <p class="card-subtitle" style="margin: 0.25rem 0 0;">
+        Phrases are added to the built-in pool. The bot guarantees intelligent variation and never repeats recent comments.
+      </p>
+    </div>
+    <span class="user-pill" style="font-family:'JetBrains Mono', monospace; font-size:0.75rem;">
+      <span id="phrase-count">{{ phrases|length }}</span> custom
+    </span>
+  </div>
+
+  <form id="phrase-add-form" class="phrase-input-row" onsubmit="handleAddPhrase(event)">
+    <input id="input-new-phrase" name="phrase" maxlength="200" placeholder="Type a custom comment (e.g. 'Love the stream! 🔥')..." autocomplete="off" required style="flex:1;">
+    <button type="submit" class="btn btn-ghost" style="white-space:nowrap;">
+      ➕ Add Phrase
+    </button>
+  </form>
+
+  <div id="phrases-container" class="phrase-tags-container">
+    {% if phrase_items %}
+      {% for item in phrase_items %}
+      <div class="phrase-tag" data-id="{{ item.id }}" data-text="{{ item.phrase }}">
+        <span>{{ item.phrase }}</span>
+        <span class="phrase-tag-remove" onclick="handleDeletePhrase({{ item.id }}, '{{ item.phrase|replace("'", "\\'") }}', this)" title="Remove phrase">×</span>
+      </div>
+      {% endfor %}
+    {% elif phrases %}
+      {% for p in phrases %}
+      <div class="phrase-tag" data-text="{{ p }}">
+        <span>{{ p }}</span>
+        <span class="phrase-tag-remove" onclick="handleDeletePhrase(null, '{{ p|replace("'", "\\'") }}', this)" title="Remove phrase">×</span>
+      </div>
+      {% endfor %}
+    {% else %}
+      <p id="empty-phrases-notice" class="muted" style="font-size:0.85rem; padding: 0.5rem 0;">No custom phrases yet. Built-in diverse pool is used automatically!</p>
+    {% endif %}
+  </div>
+</section>
+
+<!-- Client JavaScript Logic -->
 <script>
+// Elements
 const statusEl = document.getElementById('bot-status');
+const streamUrlEl = document.getElementById('stream_url');
+const saveIndicatorEl = document.getElementById('save-indicator');
+const btnSaveLink = document.getElementById('btn-save-link');
+const btnPasteLink = document.getElementById('btn-paste-link');
+const modeInput = document.getElementById('mode');
+const intervalInput = document.getElementById('interval_seconds');
+const btnStart = document.getElementById('btn-start');
+const btnStop = document.getElementById('btn-stop');
+const btnTestComment = document.getElementById('btn-test-comment');
+
+// Video preview elements
+const videoPreviewBox = document.getElementById('video-preview-box');
+const videoPreviewThumb = document.getElementById('video-preview-thumb');
+const videoPreviewTitle = document.getElementById('video-preview-title');
+const videoPreviewId = document.getElementById('video-preview-id');
+const videoPreviewLink = document.getElementById('video-preview-link');
+
+// Status & Stats elements
+const topbarLiveStatus = document.getElementById('topbar-live-status');
+const runnerBadge = document.getElementById('runner-badge');
+const runnerBadgeText = document.getElementById('runner-badge-text');
+const botElapsedTime = document.getElementById('bot-elapsed-time');
+const statTotal = document.getElementById('stat-total');
+const statToday = document.getElementById('stat-today');
+const statMode = document.getElementById('stat-mode');
+const statModeSub = document.getElementById('stat-mode-sub');
+const statInterval = document.getElementById('stat-interval');
+const statRate = document.getElementById('stat-rate');
+const monitorPulseDot = document.getElementById('monitor-pulse-dot');
+
+let botStartTime = null;
+let botTimerInterval = null;
+
+// Toast helper
+function showToast(text, type = 'success') {
+  const container = document.getElementById('toast-container');
+  if (!container) return;
+  const t = document.createElement('div');
+  t.className = `toast ${type}`;
+  let icon = '✓';
+  if (type === 'error') icon = '✕';
+  else if (type === 'info') icon = 'ℹ';
+  t.innerHTML = `<span style="font-weight:700;">${icon}</span><span>${text}</span>`;
+  container.appendChild(t);
+  setTimeout(() => {
+    t.style.opacity = '0';
+    t.style.transform = 'translateY(10px)';
+    t.style.transition = 'all 0.3s ease';
+    setTimeout(() => t.remove(), 300);
+  }, 3200);
+}
+
+// Flash save badge
+function showSavedNotice(msg = '✓ Kept & saved permanently') {
+  if (!saveIndicatorEl) return;
+  saveIndicatorEl.textContent = msg;
+  saveIndicatorEl.style.opacity = '1';
+  clearTimeout(window._saveTimer);
+  window._saveTimer = setTimeout(() => {
+    saveIndicatorEl.style.opacity = '0';
+  }, 2500);
+}
+
+// Extract Video ID helper
+function parseVideoId(url) {
+  if (!url) return null;
+  url = url.trim();
+  if (/^[\w-]{11}$/.test(url)) return url;
+  try {
+    const parsed = new URL(url.includes('://') ? url : `https://${url}`);
+    if (parsed.hostname.includes('youtu.be')) {
+      return parsed.pathname.slice(1).split('/')[0] || null;
+    }
+    if (parsed.hostname.includes('youtube.com')) {
+      if (parsed.pathname === '/watch') return parsed.searchParams.get('v');
+      const m = parsed.pathname.match(/^\/(?:live|embed|shorts)\/([\w-]{11})/);
+      if (m) return m[1];
+    }
+  } catch (_) {}
+  return null;
+}
+
+function updateVideoPreview(url) {
+  const vid = parseVideoId(url);
+  if (vid) {
+    videoPreviewThumb.src = `https://img.youtube.com/vi/${vid}/mqdefault.jpg`;
+    videoPreviewId.textContent = vid;
+    videoPreviewLink.href = `https://www.youtube.com/watch?v=${vid}`;
+    videoPreviewBox.style.display = 'flex';
+  } else {
+    videoPreviewBox.style.display = 'none';
+  }
+}
+
+// Persist Stream URL to Backend
+async function persistStreamUrl(url) {
+  url = (url || '').trim();
+  if (!url) return;
+  try { localStorage.setItem('commentbot_stream_url', url); } catch (_) {}
+  updateVideoPreview(url);
+
+  try {
+    const res = await fetch('/api/settings/stream-url', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ stream_url: url })
+    });
+    if (res.ok) {
+      showSavedNotice();
+    }
+  } catch (err) {
+    console.warn('Auto-save network error:', err);
+  }
+}
+
+// Persist Runner Settings
+async function persistRunnerSettings() {
+  const mode = modeInput ? modeInput.value : 'oauth';
+  const interval = intervalInput ? parseInt(intervalInput.value, 10) : 30;
+  try {
+    localStorage.setItem('commentbot_mode', mode);
+    localStorage.setItem('commentbot_interval', String(interval));
+  } catch (_) {}
+  try {
+    await fetch('/api/settings/runner', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: mode, interval_seconds: interval })
+    });
+  } catch (_) {}
+}
+
+// Mode Selection Handler
+function selectMode(targetMode) {
+  modeInput.value = targetMode;
+  document.querySelectorAll('.engine-card').forEach(el => el.classList.remove('active'));
+  const card = document.getElementById(`engine-${targetMode}`);
+  if (card) card.classList.add('active');
+  if (statMode) statMode.textContent = targetMode.toUpperCase();
+  persistRunnerSettings();
+  showToast(`Switched engine to ${targetMode === 'cookie' ? 'Web Cookie (Quota-Free)' : 'Google OAuth API'}`);
+}
+
+// Preset Chip Handler
+document.querySelectorAll('.preset-chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    document.querySelectorAll('.preset-chip').forEach(c => c.classList.remove('active'));
+    chip.classList.add('active');
+    const val = parseInt(chip.dataset.val, 10);
+    intervalInput.value = val;
+    document.getElementById('interval-label-hint').textContent = `Every ${val} seconds`;
+    if (statInterval) statInterval.textContent = `${val}s`;
+    if (statRate) statRate.textContent = `~${Math.round(3600 / val)}/hour`;
+    persistRunnerSettings();
+    showToast(`Interval set to ${val}s`);
+  });
+});
+
+// Stream URL Input Listeners
+let debounceTimer = null;
+streamUrlEl.addEventListener('input', (e) => {
+  const val = e.target.value.trim();
+  try { localStorage.setItem('commentbot_stream_url', val); } catch (_) {}
+  updateVideoPreview(val);
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(() => persistStreamUrl(val), 400);
+});
+
+streamUrlEl.addEventListener('change', (e) => {
+  persistStreamUrl(e.target.value.trim());
+});
+
+btnSaveLink.addEventListener('click', () => {
+  persistStreamUrl(streamUrlEl.value.trim());
+  showToast('✓ YouTube live stream link permanently saved!');
+});
+
+btnPasteLink.addEventListener('click', async () => {
+  try {
+    const text = await navigator.clipboard.readText();
+    if (text) {
+      streamUrlEl.value = text.trim();
+      persistStreamUrl(text.trim());
+      showToast('Pasted link from clipboard');
+    }
+  } catch (_) {
+    streamUrlEl.focus();
+  }
+});
+
+function toggleCookieDetails() {
+  const box = document.getElementById('cookie-manager-box');
+  if (!box) return;
+  box.style.display = (box.style.display === 'none' || !box.style.display) ? 'block' : 'none';
+}
+
+// Phrase Management
+async function handleAddPhrase(e) {
+  e.preventDefault();
+  const input = document.getElementById('input-new-phrase');
+  const phrase = (input.value || '').trim();
+  if (!phrase) return;
+
+  try {
+    const res = await fetch('/api/phrases/json', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phrase: phrase })
+    });
+    const data = await res.json();
+    if (res.ok && data.ok) {
+      input.value = '';
+      const notice = document.getElementById('empty-phrases-notice');
+      if (notice) notice.remove();
+
+      const container = document.getElementById('phrases-container');
+      const tag = document.createElement('div');
+      tag.className = 'phrase-tag';
+      tag.dataset.id = data.id;
+      tag.dataset.text = data.phrase;
+      tag.innerHTML = `<span>${escapeHtml(data.phrase)}</span><span class="phrase-tag-remove" onclick="handleDeletePhrase(${data.id}, '${escapeHtml(data.phrase)}', this)" title="Remove phrase">×</span>`;
+      container.prepend(tag);
+
+      const countEl = document.getElementById('phrase-count');
+      if (countEl) countEl.textContent = parseInt(countEl.textContent, 10) + 1;
+      showToast('✓ Custom comment phrase added');
+    } else {
+      showToast(data.detail || 'Could not add phrase', 'error');
+    }
+  } catch (err) {
+    showToast('Failed to add phrase', 'error');
+  }
+}
+
+async function handleDeletePhrase(id, text, el) {
+  try {
+    const res = await fetch('/api/phrases/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phrase_id: id, phrase: text })
+    });
+    if (res.ok) {
+      const parent = el.closest('.phrase-tag');
+      if (parent) {
+        parent.style.opacity = '0';
+        parent.style.transform = 'scale(0.8)';
+        setTimeout(() => parent.remove(), 200);
+      }
+      const countEl = document.getElementById('phrase-count');
+      if (countEl) countEl.textContent = Math.max(0, parseInt(countEl.textContent, 10) - 1);
+      showToast('Phrase removed');
+    }
+  } catch (_) {}
+}
+
+btnTestComment.addEventListener('click', async () => {
+  btnTestComment.disabled = true;
+  try {
+    const r = await fetch('/api/bot/preview-sample');
+    const data = await r.json();
+    if (data.ok && data.message) {
+      showToast(`Sample comment: "${data.message}"`, 'info');
+    }
+  } catch (_) {
+    showToast('Could not generate sample comment', 'error');
+  } finally {
+    btnTestComment.disabled = false;
+  }
+});
+
+// Bot Run Control
+btnStart.addEventListener('click', async () => {
+  const url = streamUrlEl.value.trim();
+  const interval = parseInt(intervalInput.value, 10) || 30;
+  const mode = modeInput.value;
+
+  if (!url) {
+    showToast('Please enter a YouTube live stream URL', 'error');
+    streamUrlEl.focus();
+    return;
+  }
+
+  btnStart.disabled = true;
+  btnStart.innerHTML = '<span>Starting...</span>';
+  await persistStreamUrl(url);
+
+  try {
+    const r = await fetch('/api/bots/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ stream_url: url, interval_seconds: interval, mode: mode })
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      showToast(data.detail || 'Failed to start bot', 'error');
+    } else {
+      showToast('🚀 Bot started successfully! Running in cloud.');
+      refreshStatus();
+    }
+  } catch (err) {
+    showToast('Network error starting bot', 'error');
+  } finally {
+    btnStart.disabled = false;
+    btnStart.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg><span>Start Bot</span>`;
+  }
+});
+
+btnStop.addEventListener('click', async () => {
+  btnStop.disabled = true;
+  try {
+    await fetch('/api/bots/stop', { method: 'POST' });
+    showToast('Bot stopped');
+    refreshStatus();
+  } catch (_) {}
+  finally {
+    btnStop.disabled = false;
+  }
+});
+
+// Elapsed Timer
+function updateElapsedDisplay() {
+  if (!botStartTime) {
+    botElapsedTime.textContent = 'Idle';
+    return;
+  }
+  const diff = Math.floor((Date.now() - botStartTime) / 1000);
+  const m = Math.floor(diff / 60);
+  const s = diff % 60;
+  botElapsedTime.textContent = `Live: ${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+// Real-Time Status Poller
 async function refreshStatus() {
-  const r = await fetch('/api/bots/status');
-  if (!r.ok) return;
-  const data = await r.json();
-  statusEl.innerHTML = formatStatus(data);
+  try {
+    const r = await fetch('/api/bots/status');
+    if (!r.ok) return;
+    const data = await r.json();
+
+    const isRunning = Boolean(data.running);
+    if (isRunning) {
+      if (!botStartTime) botStartTime = Date.now();
+      if (!botTimerInterval) botTimerInterval = setInterval(updateElapsedDisplay, 1000);
+      topbarLiveStatus.className = 'status-chip running';
+      topbarLiveStatus.querySelector('.status-label').textContent = '● RUNNING';
+      runnerBadge.className = 'status-chip running';
+      runnerBadgeText.textContent = 'Active Running';
+      monitorPulseDot.style.background = '#10b981';
+      btnStart.style.display = 'none';
+      btnStop.style.display = 'inline-flex';
+    } else {
+      botStartTime = null;
+      if (botTimerInterval) { clearInterval(botTimerInterval); botTimerInterval = null; }
+      botElapsedTime.textContent = 'Idle';
+      topbarLiveStatus.className = 'status-chip idle';
+      topbarLiveStatus.querySelector('.status-label').textContent = 'Bot Idle';
+      runnerBadge.className = 'status-chip idle';
+      runnerBadgeText.textContent = data.status || 'Stopped';
+      monitorPulseDot.style.background = '#94a3b8';
+      btnStart.style.display = 'inline-flex';
+      btnStop.style.display = 'none';
+    }
+
+    if (statTotal) statTotal.textContent = data.messages_sent || 0;
+    if (statToday) statToday.textContent = data.messages_sent_today || 0;
+    if (statInterval) statInterval.textContent = `${data.interval_seconds || 30}s`;
+
+    document.getElementById('stat-state-text').textContent = isRunning ? 'Running' : (data.status || 'Stopped');
+    document.getElementById('stat-method-text').textContent = data.mode === 'cookie' ? '⚡ Web Cookie (Quota-Free Unlimited)' : '🔑 Google OAuth API';
+    document.getElementById('stat-sent-text').textContent = data.messages_sent || 0;
+
+    if (data.last_message_at) {
+      document.getElementById('stat-last-time').textContent = new Date(data.last_message_at).toLocaleTimeString();
+    }
+
+    const dtErr = document.getElementById('dt-err');
+    const ddErr = document.getElementById('dd-err');
+    if (data.last_error) {
+      dtErr.style.display = 'block';
+      ddErr.style.display = 'block';
+      ddErr.textContent = data.last_error;
+    } else {
+      dtErr.style.display = 'none';
+      ddErr.style.display = 'none';
+    }
+
+    if (data.stream_url && !streamUrlEl.value) {
+      streamUrlEl.value = data.stream_url;
+      updateVideoPreview(data.stream_url);
+    }
+  } catch (_) {}
 }
-function formatStatus(data) {
-  let html = '<dl class="status-dl">';
-  html += '<dt>Status</dt><dd>' + (data.running ? 'Running' : data.status) + '</dd>';
-  html += '<dt>Method</dt><dd>' + (data.mode === 'cookie' ? '⚡ Web Cookie (Quota-Free Unlimited)' : '🔑 Google OAuth API') + '</dd>';
-  html += '<dt>Interval</dt><dd>Every ' + (data.interval_seconds || 30) + ' seconds</dd>';
-  html += '<dt>Messages sent</dt><dd>' + (data.messages_sent || 0) + '</dd>';
-  html += '<dt>Today</dt><dd>' + (data.messages_sent_today || 0) + (data.mode === 'cookie' ? ' (Unlimited 🎉)' : ' (API limit ~50 msg/day)') + '</dd>';
-  if (data.last_error) html += '<dt class="error">Error / Notice</dt><dd class="error">' + escapeHtml(data.last_error) + '</dd>';
-  html += '</dl>';
-  return html;
-}
+
 function escapeHtml(s) {
+  if (!s) return '';
   const d = document.createElement('div');
   d.textContent = s;
   return d.innerHTML;
 }
-document.getElementById('btn-start').addEventListener('click', async () => {
-  const url = document.getElementById('stream_url').value;
-  const interval = parseInt(document.getElementById('interval_seconds').value, 10) || 30;
-  const mode = document.getElementById('mode').value;
-  const r = await fetch('/api/bots/start', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({stream_url: url, interval_seconds: interval, mode: mode})
-  });
-  const data = await r.json().catch(() => ({}));
-  if (!r.ok) alert(data.detail || 'Failed to start');
-  else refreshStatus();
-});
-document.getElementById('btn-stop').addEventListener('click', async () => {
-  await fetch('/api/bots/stop', {method: 'POST'});
+
+// Initial Setup on load
+document.addEventListener('DOMContentLoaded', () => {
+  try {
+    const cachedUrl = localStorage.getItem('commentbot_stream_url');
+    if (cachedUrl && !streamUrlEl.value) {
+      streamUrlEl.value = cachedUrl;
+      persistStreamUrl(cachedUrl);
+    }
+    updateVideoPreview(streamUrlEl.value);
+  } catch (_) {}
+
   refreshStatus();
+  setInterval(refreshStatus, 3000);
 });
-refreshStatus();
-setInterval(refreshStatus, 3000);
 </script>
 {% endif %}
 {% endblock %}

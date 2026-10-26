@@ -14,9 +14,12 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    import asyncio
     app.state.db_error = None
     try:
         await init_db()
+        from app.bot.engine import resume_running_bots
+        asyncio.create_task(resume_running_bots())
     except Exception as exc:
         app.state.db_error = str(exc)
         logger.exception("Startup: database unavailable")

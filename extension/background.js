@@ -14,33 +14,43 @@ async function getStoredSettings() {
 }
 
 async function extractYouTubeCookieHeader() {
-  const [ytCookies, googleCookies] = await Promise.all([
-    chrome.cookies.getAll({ domain: "youtube.com" }),
-    chrome.cookies.getAll({ domain: "google.com" }),
+  const cookieLists = await Promise.all([
+    chrome.cookies.getAll({ domain: "youtube.com" }).catch(() => []),
+    chrome.cookies.getAll({ domain: "google.com" }).catch(() => []),
+    chrome.cookies.getAll({ url: "https://www.youtube.com" }).catch(() => []),
+    chrome.cookies.getAll({ url: "https://accounts.google.com" }).catch(() => []),
   ]);
 
   const cookieMap = new Map();
 
-  // Add Google cookies first
-  for (const c of googleCookies) {
-    if (c.name && c.value) {
-      cookieMap.set(c.name, c.value);
+  for (const list of cookieLists) {
+    if (Array.isArray(list)) {
+      for (const c of list) {
+        if (c && c.name && c.value) {
+          cookieMap.set(c.name, c.value);
+        }
+      }
     }
   }
 
-  // Add/override with YouTube specific cookies
-  for (const c of ytCookies) {
-    if (c.name && c.value) {
-      cookieMap.set(c.name, c.value);
-    }
-  }
+  const hasSapisid =
+    cookieMap.has("SAPISID") ||
+    cookieMap.has("__Secure-3PAPISID") ||
+    cookieMap.has("__Secure-1PAPISID") ||
+    cookieMap.has("APISID");
 
-  const hasSapisid = cookieMap.has("SAPISID") || cookieMap.has("__Secure-3PAPISID");
-  const hasSid = cookieMap.has("SID") || cookieMap.has("__Secure-1PSID") || cookieMap.has("__Secure-3PSID");
+  const hasSid =
+    cookieMap.has("SID") ||
+    cookieMap.has("__Secure-1PSID") ||
+    cookieMap.has("__Secure-3PSID") ||
+    cookieMap.has("SSID") ||
+    cookieMap.has("__Secure-1PSSID") ||
+    cookieMap.has("__Secure-3PSSID") ||
+    cookieMap.has("LOGIN_INFO");
 
   if (!hasSapisid || !hasSid) {
     throw new Error(
-      "Missing SAPISID or SID in browser cookies. Please open youtube.com and ensure you are signed into your account."
+      "Missing YouTube authentication cookies. Please open youtube.com and ensure you are signed into your account."
     );
   }
 
@@ -65,8 +75,30 @@ async function syncCookieToBot() {
     const payload = {
       cookie: extracted.cookieString,
     };
-    if (settings.userEmail && settings.userEmail.trim()) {
-      payload.email = settings.userEmail.trim();
+
+    let emailToSend = (settings.userEmail || "").trim();
+    if (!emailToSend) {
+      try {
+        const meRes = await fetch(`${settings.appUrl.replace(/\/+$/, "")}/api/me`, {
+          credentials: "include",
+          headers: { Accept: "application/json" },
+        });
+        if (meRes.ok) {
+          const meData = await meRes.json();
+          if (meData.email) {
+            emailToSend = meData.email;
+          } else if (meData.suggested_email) {
+            emailToSend = meData.suggested_email;
+          }
+          if (emailToSend) {
+            await chrome.storage.local.set({ userEmail: emailToSend });
+          }
+        }
+      } catch (_) {}
+    }
+
+    if (emailToSend) {
+      payload.email = emailToSend;
     }
 
     const response = await fetch(endpoint, {
@@ -90,12 +122,14 @@ async function syncCookieToBot() {
 
     const result = await response.json().catch(() => ({}));
     const now = Date.now();
+    const activeUser = result.user || emailToSend || "active user";
 
     await chrome.storage.local.set({
       lastSyncTime: now,
       lastSyncStatus: "success",
       lastSyncMessage: `✓ Synced ${extracted.count} cookies successfully`,
-      lastUser: result.user || settings.userEmail || "current user",
+      lastUser: activeUser,
+      userEmail: activeUser,
     });
 
     chrome.action.setBadgeText({ text: "OK" });
@@ -106,6 +140,7 @@ async function syncCookieToBot() {
       count: extracted.count,
       message: result.message || "Cookie updated successfully",
       timestamp: now,
+      user: activeUser,
     };
   } catch (err) {
     const errorMsg = err.message || String(err);

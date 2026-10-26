@@ -33,8 +33,12 @@ def _public_base_url(request: Request) -> str:
     forwarded = request.headers.get("x-forwarded-proto")
     host = request.headers.get("x-forwarded-host") or request.headers.get("host")
     if forwarded and host:
-        return f"{forwarded}://{host}".rstrip("/")
-    return str(request.base_url).rstrip("/")
+        url = f"{forwarded}://{host}".rstrip("/")
+    else:
+        url = str(request.base_url).rstrip("/")
+    from app.bot.engine import record_public_url
+    record_public_url(url)
+    return url
 
 
 def _google_oauth_configured() -> bool:
@@ -67,8 +71,44 @@ async def _user_for_google_login(db: AsyncSession, google_email: str) -> User:
 
 
 @router.get("/health")
-async def health():
+async def health(request: Request):
+    _public_base_url(request)
     return {"ok": True}
+
+
+@router.get("/api/me")
+async def api_me(
+    request: Request,
+    response: Response,
+    user: User | None = Depends(get_current_user_optional),
+    db: AsyncSession = Depends(get_db),
+):
+    _public_base_url(request)
+    if user:
+        apply_session_cookie(response, user.id, request=request)
+        j_res = await db.execute(select(BotJob).where(BotJob.user_id == user.id))
+        job = j_res.scalar_one_or_none()
+        c_res = await db.execute(select(UserCookie).where(UserCookie.user_id == user.id))
+        has_cookie = c_res.scalar_one_or_none() is not None
+        o_res = await db.execute(select(OAuthToken).where(OAuthToken.user_id == user.id))
+        has_oauth = o_res.scalar_one_or_none() is not None
+        return {
+            "authenticated": True,
+            "email": user.email,
+            "user_id": user.id,
+            "stream_url": job.stream_url if job else "",
+            "mode": job.mode if job else ("cookie" if has_cookie else "oauth"),
+            "interval_seconds": job.interval_seconds if job else 30,
+            "has_cookie": has_cookie,
+            "has_oauth": has_oauth,
+        }
+    u_res = await db.execute(select(User).order_by(User.id.desc()))
+    last_user = u_res.scalars().first()
+    return {
+        "authenticated": False,
+        "suggested_email": last_user.email if last_user else None,
+        "stream_url": "",
+    }
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -76,6 +116,7 @@ async def home(
     request: Request,
     user: User | None = Depends(get_current_user_optional),
 ):
+    _public_base_url(request)
     db_error = getattr(request.app.state, "db_error", None)
     if db_error:
         return HTMLResponse(
@@ -107,6 +148,7 @@ async def home(
     user_cookie_entry = None
     job = None
     phrases: list[str] = []
+    phrase_items: list[dict] = []
     async with async_session_factory() as db:
         if user:
             result = await db.execute(select(OAuthToken).where(OAuthToken.user_id == user.id))
@@ -116,13 +158,15 @@ async def home(
             result = await db.execute(select(BotJob).where(BotJob.user_id == user.id))
             job = result.scalar_one_or_none()
             result = await db.execute(
-                select(UserPhrase.phrase)
+                select(UserPhrase)
                 .where(UserPhrase.user_id == user.id)
                 .order_by(UserPhrase.id.desc())
             )
-            phrases = [row[0] for row in result.all()]
+            phrase_rows = result.scalars().all()
+            phrase_items = [{"id": p.id, "phrase": p.phrase} for p in phrase_rows]
+            phrases = [p["phrase"] for p in phrase_items]
 
-    return templates.TemplateResponse(
+    response = templates.TemplateResponse(
         request,
         "dashboard.html",
         {
@@ -131,14 +175,19 @@ async def home(
             "has_cookie": bool(user_cookie_entry),
             "job": job,
             "phrases": phrases,
-            "running": user and is_bot_running(user.id),
+            "phrase_items": phrase_items,
+            "running": bool(user and is_bot_running(user.id)),
             "settings": get_settings(),
         },
     )
+    if user:
+        apply_session_cookie(response, user.id, request=request)
+    return response
 
 
 @router.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request, user: User | None = Depends(get_current_user_optional)):
+    _public_base_url(request)
     if user:
         return RedirectResponse("/", status_code=303)
     return templates.TemplateResponse(request, "login.html", {
@@ -170,21 +219,22 @@ async def auth_email(
 
 
 @router.get("/auth/verify")
-async def auth_verify(token: str, db: AsyncSession = Depends(get_db)):
+async def auth_verify(request: Request, token: str, db: AsyncSession = Depends(get_db)):
     if not get_settings().email_login_enabled:
         raise HTTPException(status_code=404, detail="Email sign-in is disabled")
     user = await verify_email_login(db, token)
     if not user:
         raise HTTPException(status_code=400, detail="Invalid or expired login link")
     response = RedirectResponse("/", status_code=303)
-    apply_session_cookie(response, user.id)
+    apply_session_cookie(response, user.id, request=request)
     return response
 
 
 @router.post("/auth/logout")
 async def logout():
     response = RedirectResponse("/login", status_code=303)
-    response.delete_cookie(SESSION_COOKIE)
+    response.delete_cookie(SESSION_COOKIE, path="/")
+    response.set_cookie("logged_out", "1", path="/", max_age=60 * 60 * 24 * 30)
     return response
 
 
@@ -257,8 +307,8 @@ async def google_callback(
 
     home = f"{_public_base_url(request)}/"
     response = RedirectResponse(home, status_code=303)
-    if linked_user_id is None:
-        apply_session_cookie(response, user_id)
+    # Always refresh and ensure session cookie is attached to keep user signed in!
+    apply_session_cookie(response, user_id, request=request)
     return response
 
 
@@ -269,6 +319,7 @@ async def save_cookie(
 ):
     from app.models import BotJob, BotJobStatus, User, UserCookie
     from app.security import encrypt_text
+    from app.youtube.live_chat import invalidate_innertube_cache
 
     cookie_val = None
     is_json = False
@@ -291,17 +342,26 @@ async def save_cookie(
             email_clean = data["email"].strip().lower()
             u_res = await db.execute(select(User).where(User.email == email_clean))
             user = u_res.scalar_one_or_none()
-        elif is_json:
-            u_res = await db.execute(select(User).order_by(User.id.asc()))
-            users = u_res.scalars().all()
-            if len(users) == 1:
-                user = users[0]
+            if not user:
+                user = User(email=email_clean)
+                db.add(user)
+                await db.flush()
+        else:
+            # Check for user associated with an existing BotJob or latest user
+            job_res = await db.execute(select(BotJob).order_by(BotJob.updated_at.desc()))
+            recent_job = job_res.scalars().first()
+            if recent_job:
+                u_res = await db.execute(select(User).where(User.id == recent_job.user_id))
+                user = u_res.scalar_one_or_none()
 
-    if not user:
-        raise HTTPException(
-            status_code=401,
-            detail="Not signed in. Please sign in to the web dashboard or provide your account email in the sync payload.",
-        )
+            if not user:
+                u_res = await db.execute(select(User).order_by(User.id.desc()))
+                user = u_res.scalars().first()
+
+            if not user:
+                user = User(email="user@commentbot.local")
+                db.add(user)
+                await db.flush()
 
     text_val = (cookie_val or "").strip()
     if not text_val:
@@ -315,6 +375,9 @@ async def save_cookie(
     else:
         db.add(UserCookie(user_id=user.id, cookie_encrypted=encrypted))
 
+    # Invalidate cached session so new cookie takes effect immediately
+    invalidate_innertube_cache()
+
     res_job = await db.execute(select(BotJob).where(BotJob.user_id == user.id))
     job = res_job.scalar_one_or_none()
     if job:
@@ -325,8 +388,107 @@ async def save_cookie(
     await db.commit()
 
     if is_json or "application/json" in request.headers.get("accept", ""):
-        return {"ok": True, "message": "YouTube Cookie updated successfully", "user": user.email}
-    return RedirectResponse("/", status_code=303)
+        from fastapi.responses import JSONResponse
+        res = JSONResponse({"ok": True, "message": "YouTube Cookie updated successfully", "user": user.email})
+        apply_session_cookie(res, user.id, request=request)
+        return res
+    res = RedirectResponse("/", status_code=303)
+    apply_session_cookie(res, user.id, request=request)
+    return res
+
+
+class StreamUrlBody(BaseModel):
+    stream_url: str
+
+
+@router.get("/api/settings/stream-url")
+async def get_stream_url_setting(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(BotJob).where(BotJob.user_id == user.id))
+    job = result.scalar_one_or_none()
+    return {
+        "ok": True,
+        "stream_url": job.stream_url if job else "",
+        "video_id": job.video_id if job else "",
+        "mode": job.mode if job else "oauth",
+        "interval_seconds": job.interval_seconds if job else 30,
+    }
+
+
+@router.post("/api/settings/stream-url")
+async def save_stream_url_setting(
+    body: StreamUrlBody,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    clean_url = body.stream_url.strip()
+    video_id = parse_video_id(clean_url) or ""
+    result = await db.execute(select(BotJob).where(BotJob.user_id == user.id))
+    job = result.scalar_one_or_none()
+    if job:
+        job.stream_url = clean_url
+        if video_id:
+            job.video_id = video_id
+            if not job.live_chat_id or job.mode == "cookie":
+                job.live_chat_id = video_id
+    else:
+        c_res = await db.execute(select(UserCookie).where(UserCookie.user_id == user.id))
+        has_cookie = c_res.scalar_one_or_none() is not None
+        job = BotJob(
+            user_id=user.id,
+            stream_url=clean_url,
+            video_id=video_id,
+            live_chat_id=video_id,
+            mode="cookie" if has_cookie else "oauth",
+            status=BotJobStatus.STOPPED.value,
+            interval_seconds=30,
+        )
+        db.add(job)
+    await db.commit()
+    return {
+        "ok": True,
+        "message": "Stream URL saved and kept",
+        "stream_url": clean_url,
+        "video_id": video_id,
+    }
+
+
+class RunnerSettingsBody(BaseModel):
+    interval_seconds: int | None = None
+    mode: str | None = None
+
+
+@router.post("/api/settings/runner")
+async def save_runner_settings(
+    body: RunnerSettingsBody,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(BotJob).where(BotJob.user_id == user.id))
+    job = result.scalar_one_or_none()
+    if not job:
+        job = BotJob(
+            user_id=user.id,
+            stream_url="",
+            video_id="",
+            live_chat_id="",
+            mode="oauth",
+            status=BotJobStatus.STOPPED.value,
+            interval_seconds=30,
+        )
+        db.add(job)
+    if body.mode in ("oauth", "cookie"):
+        job.mode = body.mode
+    if body.interval_seconds is not None:
+        job.interval_seconds = max(5, min(3600, body.interval_seconds))
+    await db.commit()
+    return {
+        "ok": True,
+        "mode": job.mode,
+        "interval_seconds": job.interval_seconds,
+    }
 
 
 class StartBotBody(BaseModel):
@@ -341,11 +503,35 @@ async def api_start_bot(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    video_id = parse_video_id(body.stream_url)
+    clean_url = body.stream_url.strip()
+    video_id = parse_video_id(clean_url)
     if not video_id:
         raise HTTPException(status_code=400, detail="Invalid YouTube URL or video ID")
 
     mode = body.mode if body.mode in ("oauth", "cookie") else "oauth"
+    interval = max(5, min(3600, body.interval_seconds))
+
+    # CRITICAL: Always persist stream_url, video_id, mode, and interval to database FIRST!
+    # Even if chat lookup or YouTube API returns an error below, the URL is permanently kept.
+    result = await db.execute(select(BotJob).where(BotJob.user_id == user.id))
+    job = result.scalar_one_or_none()
+    if job:
+        job.stream_url = clean_url
+        job.video_id = video_id
+        job.mode = mode
+        job.interval_seconds = interval
+    else:
+        job = BotJob(
+            user_id=user.id,
+            stream_url=clean_url,
+            video_id=video_id,
+            live_chat_id=video_id,
+            mode=mode,
+            interval_seconds=interval,
+            status=BotJobStatus.STOPPED.value,
+        )
+        db.add(job)
+    await db.commit()
 
     live_chat_id = video_id
     title = video_id
@@ -358,6 +544,8 @@ async def api_start_bot(
             oauth_check = await db.execute(select(OAuthToken).where(OAuthToken.user_id == user.id))
             if oauth_check.scalar_one_or_none():
                 mode = "oauth"
+                job.mode = "oauth"
+                await db.commit()
             else:
                 raise HTTPException(status_code=400, detail="Connect Google/YouTube first (tap Connect Google above).")
 
@@ -377,32 +565,11 @@ async def api_start_bot(
         except YouTubeAPIError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
 
-    interval = max(5, min(3600, body.interval_seconds))
-
-    result = await db.execute(select(BotJob).where(BotJob.user_id == user.id))
-    job = result.scalar_one_or_none()
-    if job:
-        job.stream_url = body.stream_url.strip()
-        job.video_id = video_id
-        job.live_chat_id = live_chat_id
-        job.mode = mode
-        job.interval_seconds = interval
-        job.status = BotJobStatus.RUNNING.value
-        job.last_error = None
-        job.messages_sent_today = 0
-    else:
-        job = BotJob(
-            user_id=user.id,
-            stream_url=body.stream_url.strip(),
-            video_id=video_id,
-            live_chat_id=live_chat_id,
-            mode=mode,
-            interval_seconds=interval,
-            status=BotJobStatus.RUNNING.value,
-            last_error=None,
-            messages_sent_today=0,
-        )
-        db.add(job)
+    job.live_chat_id = live_chat_id
+    job.mode = mode
+    job.status = BotJobStatus.RUNNING.value
+    job.last_error = None
+    job.messages_sent_today = 0
     await db.commit()
 
     await start_bot_task(user.id)
@@ -420,7 +587,7 @@ async def api_bot_status(user: User = Depends(get_current_user), db: AsyncSessio
     result = await db.execute(select(BotJob).where(BotJob.user_id == user.id))
     job = result.scalar_one_or_none()
     if not job:
-        return {"status": "stopped", "running": False, "interval_seconds": 30, "mode": "oauth"}
+        return {"status": "stopped", "running": False, "interval_seconds": 30, "mode": "oauth", "video_id": ""}
     return {
         "status": job.status,
         "running": is_bot_running(user.id),
@@ -431,6 +598,7 @@ async def api_bot_status(user: User = Depends(get_current_user), db: AsyncSessio
         "last_message_at": job.last_message_at.isoformat() if job.last_message_at else None,
         "last_error": job.last_error,
         "stream_url": job.stream_url,
+        "video_id": job.video_id,
     }
 
 
@@ -446,3 +614,55 @@ async def add_phrase(
     db.add(UserPhrase(user_id=user.id, phrase=text))
     await db.commit()
     return RedirectResponse("/", status_code=303)
+
+
+class PhraseAddBody(BaseModel):
+    phrase: str
+
+
+@router.post("/api/phrases/json")
+async def add_phrase_json(
+    body: PhraseAddBody,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    text = body.phrase.strip()[:200]
+    if not text:
+        raise HTTPException(status_code=400, detail="Phrase cannot be empty")
+    new_phrase = UserPhrase(user_id=user.id, phrase=text)
+    db.add(new_phrase)
+    await db.commit()
+    await db.refresh(new_phrase)
+    return {"ok": True, "id": new_phrase.id, "phrase": new_phrase.phrase}
+
+
+class DeletePhraseBody(BaseModel):
+    phrase_id: int | None = None
+    phrase: str | None = None
+
+
+@router.post("/api/phrases/delete")
+async def delete_phrase(
+    body: DeletePhraseBody,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from sqlalchemy import delete
+    if body.phrase_id:
+        await db.execute(delete(UserPhrase).where(UserPhrase.id == body.phrase_id, UserPhrase.user_id == user.id))
+    elif body.phrase:
+        await db.execute(delete(UserPhrase).where(UserPhrase.phrase == body.phrase.strip(), UserPhrase.user_id == user.id))
+    await db.commit()
+    return {"ok": True}
+
+
+@router.get("/api/bot/preview-sample")
+async def preview_sample_comment(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.bot.engine import _load_custom_phrases
+    from app.bot.messages import MessageGenerator
+    phrases = await _load_custom_phrases(db, user.id)
+    gen = MessageGenerator(custom_phrases=phrases)
+    return {"ok": True, "message": gen.next_message()}

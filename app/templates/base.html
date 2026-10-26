@@ -3,23 +3,75 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}YouTube Comment Bot{% endblock %}</title>
+  <title>{% block title %}Comment Bot — YouTube Live Automator{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/style.css">
   <script src="https://unpkg.com/htmx.org@2.0.4"></script>
 </head>
 <body>
+  <div class="ambient-glow glow-top"></div>
+  <div class="ambient-glow glow-bottom"></div>
+
   <header class="topbar">
-    <div class="wrap">
-      <a class="brand" href="/">Comment Bot</a>
-      {% if user %}
-      <form action="/auth/logout" method="post">
-        <button type="submit" class="btn btn-ghost">Sign out</button>
-      </form>
-      {% endif %}
+    <div class="wrap topbar-inner">
+      <a class="brand" href="/">
+        <span class="brand-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M19.615 3.184c-3.604-.246-11.631-.245-15.23 0-3.897.266-4.356 2.62-4.385 8.816.029 6.185.484 8.549 4.385 8.816 3.6.245 11.626.246 15.23 0 3.897-.266 4.356-2.62 4.385-8.816-.029-6.185-.484-8.549-4.385-8.816zm-10.615 12.816v-8l8 3.993-8 4.007z"/>
+          </svg>
+        </span>
+        <span class="brand-text">Comment<span class="brand-highlight">Bot</span></span>
+        <span class="brand-badge">PRO</span>
+      </a>
+
+      <div class="topbar-actions">
+        <div id="topbar-live-status" class="status-chip idle">
+          <span class="status-dot"></span>
+          <span class="status-label">Bot Idle</span>
+        </div>
+
+        {% if user %}
+        <div class="user-menu">
+          <div class="user-pill" title="{{ user.email }}">
+            <span class="user-avatar">{{ user.email[0]|upper }}</span>
+            <span class="user-email-text">{{ user.email }}</span>
+          </div>
+          <form action="/auth/logout" method="post" style="margin:0;">
+            <button type="submit" class="btn btn-ghost btn-sm" title="Sign out of this session">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                <polyline points="16 17 21 12 16 7"></polyline>
+                <line x1="21" y1="12" x2="9" y2="12"></line>
+              </svg>
+              <span>Exit</span>
+            </button>
+          </form>
+        </div>
+        {% endif %}
+      </div>
     </div>
   </header>
-  <main class="wrap">
+
+  <main class="wrap main-content">
     {% block content %}{% endblock %}
   </main>
+
+  <footer class="site-footer">
+    <div class="wrap footer-content">
+      <div class="footer-left">
+        <span>⚡ YouTube Comment Bot</span>
+        <span class="footer-separator">•</span>
+        <span>Auto-sync & persistent cloud runner</span>
+      </div>
+      <div class="footer-right">
+        <a href="https://github.com" target="_blank" rel="noreferrer" class="footer-link">Documentation</a>
+        <a href="/ready" class="footer-link">System Health</a>
+      </div>
+    </div>
+  </footer>
+
+  <div id="toast-container" class="toast-container"></div>
 </body>
 </html>

@@ -1,36 +1,51 @@
 {% extends "base.html" %}
 {% block title %}Sign in — Comment Bot{% endblock %}
 {% block content %}
-<section class="card">
-  <h1>Sign in</h1>
-  <p class="muted">Use Google — no email confirmation. Same account you use for YouTube.</p>
+<section class="card" style="max-width: 460px; margin: 2rem auto; text-align: center; padding: 2.25rem 1.75rem;">
+  <div style="width: 52px; height: 52px; border-radius: 14px; background: var(--yt-red-gradient); display: inline-flex; align-items: center; justify-content: center; margin-bottom: 1rem; box-shadow: 0 0 20px rgba(255, 0, 51, 0.4);">
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="#fff">
+      <path d="M19.615 3.184c-3.604-.246-11.631-.245-15.23 0-3.897.266-4.356 2.62-4.385 8.816.029 6.185.484 8.549 4.385 8.816 3.6.245 11.626.246 15.23 0 3.897-.266 4.356-2.62 4.385-8.816-.029-6.185-.484-8.549-4.385-8.816zm-10.615 12.816v-8l8 3.993-8 4.007z"/>
+    </svg>
+  </div>
+  
+  <h1 style="font-size: 1.45rem; font-weight: 800; margin-bottom: 0.4rem; letter-spacing: -0.02em;">Welcome Back</h1>
+  <p class="muted" style="font-size: 0.88rem; margin-bottom: 1.5rem;">
+    Sign in with Google to manage your live stream comment runner.
+  </p>
 
   {% if request.query_params.get('error') %}
-  <p class="error">
-    Google sign-in failed ({{ request.query_params.get('error') }}).
+  <div style="background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: var(--radius-sm); padding: 0.75rem; margin-bottom: 1rem; text-align: left; font-size: 0.82rem; color: #fca5a5;">
+    <strong>Sign-in notice:</strong> {{ request.query_params.get('error') }}
     {% if request.query_params.get('error') == 'invalid_state' %}
-    Start again from this page — do not bookmark the Google callback URL.
-    {% elif request.query_params.get('error') == 'oauth_exchange_failed' %}
-    Check that Google Cloud redirect URI includes:
-    <code>{{ request.url.scheme }}://{{ request.headers.get('host') }}/auth/google/callback</code>
+    <p style="margin-top: 0.3rem;">Please tap the button below to start a fresh sign-in.</p>
     {% endif %}
-  </p>
-  {% endif %}
-  {% if error %}
-  <p class="error">{{ error }}</p>
-  {% elif sent %}
-  <p class="success">Check your inbox and <strong>Spam</strong> for the sign-in link.</p>
+  </div>
   {% endif %}
 
-  <a class="btn btn-primary" href="/auth/google/login" style="display:block;margin:1rem 0;">Sign in with Google</a>
+  {% if error %}
+  <div style="background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: var(--radius-sm); padding: 0.75rem; margin-bottom: 1rem; font-size: 0.85rem; color: #fca5a5;">
+    {{ error }}
+  </div>
+  {% elif sent %}
+  <div style="background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: var(--radius-sm); padding: 0.75rem; margin-bottom: 1rem; font-size: 0.85rem; color: #6ee7b7;">
+    ✓ Check your inbox and <strong>Spam</strong> folder for the sign-in magic link.
+  </div>
+  {% endif %}
+
+  <a class="btn btn-primary" href="/auth/google/login" style="width: 100%; font-size: 0.95rem; padding: 0.8rem; margin-bottom: 1rem;">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M12.24 10.285V13.4h6.887C18.2 16.14 15.645 18 12.24 18c-3.315 0-6-2.685-6-6s2.685-6 6-6c1.47 0 2.805.54 3.84 1.425l2.4-2.4C16.89 3.51 14.7 2.6 12.24 2.6 7.02 2.6 2.8 6.82 2.8 12.04s4.22 9.44 9.44 9.44c5.445 0 9.1-3.825 9.1-9.28 0-.645-.06-1.26-.18-1.84h-8.92z"/>
+    </svg>
+    <span>Continue with Google</span>
+  </a>
 
   {% if email_login_enabled %}
-  <details class="muted">
-    <summary>Sign in with email instead (magic link)</summary>
-    <form method="post" action="/auth/email" class="stack" style="margin-top:0.75rem;">
-      <label for="email">Email</label>
+  <details class="muted" style="text-align: left; margin-top: 1.25rem; font-size: 0.82rem;">
+    <summary style="cursor: pointer; color: #94a3b8; text-align: center;">Use email magic link instead</summary>
+    <form method="post" action="/auth/email" class="stack" style="margin-top: 1rem;">
+      <label for="email" class="field-label">Your Email</label>
       <input id="email" name="email" type="email" required placeholder="you@example.com" value="{{ email or '' }}">
-      <button type="submit" class="btn btn-ghost">Send magic link</button>
+      <button type="submit" class="btn btn-ghost" style="width: 100%;">Send Magic Link</button>
     </form>
   </details>
   {% endif %}

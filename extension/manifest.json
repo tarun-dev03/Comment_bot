@@ -6,7 +6,9 @@
   "permissions": [
     "cookies",
     "storage",
-    "alarms"
+    "alarms",
+    "activeTab",
+    "tabs"
   ],
   "host_permissions": [
     "*://*.youtube.com/*",

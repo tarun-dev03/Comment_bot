@@ -259,5 +259,234 @@ async def test_save_cookie_json_endpoint():
         assert data.get("user") == "sync_test@example.com"
 
 
+@pytest.mark.anyio
+async def test_innertube_session_caching_and_no_repeated_get(monkeypatch):
+    import httpx
+    from app.youtube.live_chat import send_innertube_live_chat_message, invalidate_innertube_cache
+
+    invalidate_innertube_cache()
+    get_count = 0
+    post_count = 0
+
+    class MockGetResp:
+        status_code = 200
+        text = '''<html>
+        <script>var ytInitialData = {"sendLiveChatMessageEndpoint": {"params": "cached_token_123"}};</script>
+        "INNERTUBE_API_KEY": "cached_api_key",
+        "INNERTUBE_CLIENT_VERSION": "2.20261002.01.00"
+        </html>'''
+
+    class MockPostResp:
+        status_code = 200
+        def json(self):
+            return {
+                "actions": [
+                    {"addChatItemAction": {"item": {"liveChatTextMessageRenderer": {}}}}
+                ]
+            }
+
+    async def mock_get(self, url, **kwargs):
+        nonlocal get_count
+        get_count += 1
+        return MockGetResp()
+
+    async def mock_post(self, url, **kwargs):
+        nonlocal post_count
+        post_count += 1
+        return MockPostResp()
+
+    monkeypatch.setattr(httpx.AsyncClient, "get", mock_get)
+    monkeypatch.setattr(httpx.AsyncClient, "post", mock_post)
+
+    cookie = "SAPISID=test_sapisid; SID=test_sid; HSID=test_hsid;"
+    # First message: fetches page and caches parameters
+    await send_innertube_live_chat_message(cookie, "cache_vid_1", "Message 1")
+    assert get_count == 1
+    assert post_count == 1
+
+    # Second message: should reuse cached session and NOT perform a GET request!
+    await send_innertube_live_chat_message(cookie, "cache_vid_1", "Message 2")
+    assert get_count == 1  # No additional GET!
+    assert post_count == 2
+
+
+@pytest.mark.anyio
+async def test_innertube_params_override_sign_in_text(monkeypatch):
+    """If valid chat params are found in ytInitialData, presence of 'Sign in to chat' in unrelated text does not cause false error."""
+    import httpx
+    from app.youtube.live_chat import send_innertube_live_chat_message, invalidate_innertube_cache
+
+    invalidate_innertube_cache()
+
+    class MockGetResp:
+        status_code = 200
+        text = '''<html>
+        <div>Sign in to chat</div> <!-- e.g. unrelated UI bundle or suggested stream banner -->
+        <script>var ytInitialData = {"sendLiveChatMessageEndpoint": {"params": "valid_token_abc"}};</script>
+        "INNERTUBE_API_KEY": "api_key_abc",
+        "INNERTUBE_CLIENT_VERSION": "2.20261002.01.00"
+        </html>'''
+
+    class MockPostResp:
+        status_code = 200
+        def json(self):
+            return {
+                "actions": [
+                    {"addChatItemAction": {"item": {"liveChatTextMessageRenderer": {}}}}
+                ]
+            }
+
+    async def mock_get(self, url, **kwargs):
+        return MockGetResp()
+
+    async def mock_post(self, url, **kwargs):
+        return MockPostResp()
+
+    monkeypatch.setattr(httpx.AsyncClient, "get", mock_get)
+    monkeypatch.setattr(httpx.AsyncClient, "post", mock_post)
+
+    cookie = "SAPISID=test_sapisid; SID=test_sid; HSID=test_hsid;"
+    res = await send_innertube_live_chat_message(cookie, "valid_vid", "Testing valid chat")
+    assert "test_sapisid" in res
+
+
+@pytest.mark.anyio
+async def test_api_me_endpoint():
+    import httpx
+    from app.main import app
+    from app.db import init_db
+
+    await init_db()
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.get("/api/me")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "authenticated" in data
+        assert data["authenticated"] is True
+        assert "stream_url" in data
+
+
+@pytest.mark.anyio
+async def test_stream_url_saved_and_kept_until_updated():
+    import httpx
+    from app.main import app
+    from app.db import init_db, async_session_factory
+    from app.models import BotJob, User
+    from sqlalchemy import select
+
+    await init_db()
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        test_link_1 = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+        save_resp = await client.post(
+            "/api/settings/stream-url",
+            json={"stream_url": test_link_1},
+            headers={"Content-Type": "application/json"},
+        )
+        assert save_resp.status_code == 200
+        assert save_resp.json()["ok"] is True
+        assert save_resp.json()["stream_url"] == test_link_1
+        assert save_resp.json()["video_id"] == "dQw4w9WgXcQ"
+
+        # Verify GET returns the saved link
+        get_resp = await client.get("/api/settings/stream-url")
+        assert get_resp.status_code == 200
+        assert get_resp.json()["stream_url"] == test_link_1
+
+        # Verify /api/me also returns the saved link
+        me_resp = await client.get("/api/me")
+        assert me_resp.status_code == 200
+        assert me_resp.json()["stream_url"] == test_link_1
+
+        # Now update the link
+        test_link_2 = "https://www.youtube.com/live/jfKfPfyJRdk"
+        update_resp = await client.post(
+            "/api/settings/stream-url",
+            json={"stream_url": test_link_2},
+            headers={"Content-Type": "application/json"},
+        )
+        assert update_resp.status_code == 200
+        assert update_resp.json()["stream_url"] == test_link_2
+
+        # Verify new link is now kept
+        get_resp2 = await client.get("/api/settings/stream-url")
+        assert get_resp2.status_code == 200
+        assert get_resp2.json()["stream_url"] == test_link_2
+
+
+@pytest.mark.anyio
+async def test_stream_url_persists_even_if_bot_start_errors():
+    import httpx
+    from app.main import app
+    from app.db import init_db
+
+    await init_db()
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        offline_stream = "https://www.youtube.com/watch?v=offline1234"
+        # Starting with an offline stream / unconfigured OAuth throws 400
+        start_resp = await client.post(
+            "/api/bots/start",
+            json={"stream_url": offline_stream, "interval_seconds": 15, "mode": "oauth"},
+            headers={"Content-Type": "application/json"},
+        )
+        # It errors because Google OAuth is not connected
+        assert start_resp.status_code == 400
+
+        # But the stream URL must STILL be saved in the database and retrieved!
+        get_resp = await client.get("/api/settings/stream-url")
+        assert get_resp.status_code == 200
+        assert get_resp.json()["stream_url"] == offline_stream
+        assert get_resp.json()["video_id"] == "offline1234"
+        assert get_resp.json()["interval_seconds"] == 15
+
+
+@pytest.mark.anyio
+async def test_runner_settings_persisted():
+    import httpx
+    from app.main import app
+    from app.db import init_db
+
+    await init_db()
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post(
+            "/api/settings/runner",
+            json={"mode": "cookie", "interval_seconds": 10},
+            headers={"Content-Type": "application/json"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["mode"] == "cookie"
+        assert data["interval_seconds"] == 10
+
+        get_resp = await client.get("/api/settings/stream-url")
+        assert get_resp.json()["mode"] == "cookie"
+        assert get_resp.json()["interval_seconds"] == 10
+
+
+@pytest.mark.anyio
+async def test_persistent_session_and_credentials_never_forgotten():
+    import httpx
+    from app.main import app
+    from app.db import init_db
+
+    await init_db()
+    transport = httpx.ASGITransport(app=app)
+    # Brand new client with NO cookies
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        # Visiting home page without cookies
+        resp = await client.get("/")
+        assert resp.status_code == 200
+        # A persistent session cookie must be issued to the client
+        assert "session" in resp.cookies
+        # The page must NOT be blocked by the empty login screen
+        assert "Live Stream Bot Runner" in resp.text
+        assert "Target YouTube Live Stream URL" in resp.text
+
+
+
+
 
 

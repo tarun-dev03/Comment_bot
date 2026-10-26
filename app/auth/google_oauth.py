@@ -63,20 +63,39 @@ def invalidate_token_cache(user_id: int) -> None:
 
 
 async def refresh_access_token_details(refresh_token: str) -> dict:
+    import asyncio
     settings = get_settings()
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        resp = await client.post(
-            GOOGLE_TOKEN_URL,
-            data={
-                "client_id": settings.google_client_id,
-                "client_secret": settings.google_client_secret,
-                "refresh_token": refresh_token,
-                "grant_type": "refresh_token",
-            },
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
-        )
-        resp.raise_for_status()
-        return resp.json()
+    last_exc = None
+    for attempt in range(3):
+        try:
+            async with httpx.AsyncClient(timeout=20.0) as client:
+                resp = await client.post(
+                    GOOGLE_TOKEN_URL,
+                    data={
+                        "client_id": settings.google_client_id,
+                        "client_secret": settings.google_client_secret,
+                        "refresh_token": refresh_token,
+                        "grant_type": "refresh_token",
+                    },
+                    headers={"Content-Type": "application/x-www-form-urlencoded"},
+                )
+                if resp.status_code == 400:
+                    # Token revoked or invalid
+                    logger.warning("Google refresh token invalid or revoked (HTTP 400): %s", resp.text)
+                    resp.raise_for_status()
+                resp.raise_for_status()
+                return resp.json()
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 400:
+                raise
+            last_exc = exc
+        except (httpx.RequestError, TimeoutError) as exc:
+            last_exc = exc
+        if attempt < 2:
+            await asyncio.sleep(1.0 * (attempt + 1))
+    if last_exc:
+        raise last_exc
+    raise RuntimeError("Failed to refresh token after retries")
 
 
 async def refresh_access_token(refresh_token: str) -> str:

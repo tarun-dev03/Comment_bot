@@ -202,6 +202,19 @@ def _check_chat_restrictions(data: any) -> str | None:
     return None
 
 
+_innertube_cache: dict[str, dict] = {}
+
+
+def invalidate_innertube_cache(video_id: str | None = None) -> None:
+    """Invalidate cached InnerTube session parameters."""
+    if video_id:
+        keys_to_remove = [k for k in _innertube_cache if k.startswith(f"{video_id}_")]
+        for k in keys_to_remove:
+            _innertube_cache.pop(k, None)
+    else:
+        _innertube_cache.clear()
+
+
 async def send_innertube_live_chat_message(
     cookie_string: str, video_id: str, message: str
 ) -> str:
@@ -215,7 +228,12 @@ async def send_innertube_live_chat_message(
     if not cookie_string:
         raise YouTubeAPIError("YouTube Cookie is empty. Please enter your YouTube cookie in settings.", 401)
 
-    sapisid = _extract_cookie_val(cookie_string, "SAPISID") or _extract_cookie_val(cookie_string, "__Secure-3PAPISID")
+    sapisid = (
+        _extract_cookie_val(cookie_string, "SAPISID")
+        or _extract_cookie_val(cookie_string, "__Secure-3PAPISID")
+        or _extract_cookie_val(cookie_string, "__Secure-1PAPISID")
+        or _extract_cookie_val(cookie_string, "APISID")
+    )
     if not sapisid:
         raise YouTubeAPIError(
             "YouTube Cookie missing SAPISID. Make sure to copy the full 'Cookie:' header from DevTools > Network tab (do not use document.cookie).",
@@ -226,9 +244,13 @@ async def send_innertube_live_chat_message(
         _extract_cookie_val(cookie_string, "SID")
         or _extract_cookie_val(cookie_string, "__Secure-1PSID")
         or _extract_cookie_val(cookie_string, "__Secure-3PSID")
+        or _extract_cookie_val(cookie_string, "SSID")
+        or _extract_cookie_val(cookie_string, "__Secure-1PSSID")
+        or _extract_cookie_val(cookie_string, "__Secure-3PSSID")
+        or _extract_cookie_val(cookie_string, "LOGIN_INFO")
     )
     has_hsid = bool(_extract_cookie_val(cookie_string, "HSID"))
-    if not has_sid or not has_hsid:
+    if not has_sid and not has_hsid:
         logger.warning(
             "Cookie string appears to be missing SID or HSID (often caused by copying from Console/document.cookie)."
         )
@@ -238,114 +260,144 @@ async def send_innertube_live_chat_message(
         "(KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36"
     )
 
-    url = f"https://www.youtube.com/live_chat?v={video_id}"
-    headers = {
-        "User-Agent": user_agent,
-        "Cookie": cookie_string,
-        "Accept-Language": "en-US,en;q=0.9",
-    }
+    sapisid_hash = hashlib.sha256(sapisid.encode("utf-8")).hexdigest()[:12]
+    cache_key = f"{video_id}_{sapisid_hash}"
+
+    async def _fetch_session_params(client: httpx.AsyncClient) -> dict:
+        url = f"https://www.youtube.com/live_chat?v={video_id}"
+        headers = {
+            "User-Agent": user_agent,
+            "Cookie": cookie_string,
+            "Accept-Language": "en-US,en;q=0.9",
+        }
+
+        resp = await client.get(url, headers=headers)
+        if resp.status_code in (401, 403):
+            raise YouTubeAPIError(
+                "YouTube Cookie expired or unauthorized (HTTP 401/403). Please update your YouTube Cookie.",
+                401,
+            )
+        if resp.status_code != 200:
+            raise YouTubeAPIError(f"Failed to load YouTube live chat page (HTTP {resp.status_code})", resp.status_code)
+
+        html = resp.text
+
+        api_key_match = re.search(r'"INNERTUBE_API_KEY":\s*"([^"]+)"', html)
+        client_ver_match = re.search(r'"INNERTUBE_CLIENT_VERSION":\s*"([^"]+)"', html)
+
+        if not api_key_match or not client_ver_match:
+            # Fallback to main watch page
+            alt_url = f"https://www.youtube.com/watch?v={video_id}"
+            resp_alt = await client.get(alt_url, headers=headers)
+            if resp_alt.status_code == 200:
+                html_alt = resp_alt.text
+                api_key_match = api_key_match or re.search(r'"INNERTUBE_API_KEY":\s*"([^"]+)"', html_alt)
+                client_ver_match = client_ver_match or re.search(r'"INNERTUBE_CLIENT_VERSION":\s*"([^"]+)"', html_alt)
+                if api_key_match and client_ver_match:
+                    html = html_alt
+
+        params = None
+        yt_initial_data = None
+        match = re.search(r'window\["ytInitialData"\]\s*=\s*(\{.*?\});</script>', html) or \
+                re.search(r'var ytInitialData\s*=\s*(\{.*?\});</script>', html)
+        if match:
+            try:
+                yt_initial_data = json.loads(match.group(1))
+                params = _find_send_chat_params(yt_initial_data)
+                if not params:
+                    restriction = _check_chat_restrictions(yt_initial_data)
+                    if restriction:
+                        raise YouTubeAPIError(f"Cannot chat on this live stream: {restriction}", 400)
+            except YouTubeAPIError:
+                raise
+            except Exception:
+                pass
+
+        if not params:
+            endpoint_match = re.search(r'"sendLiveChatMessageEndpoint":\s*\{.*?"params":\s*"([^"]+)"', html, re.DOTALL) or \
+                             re.search(r'"liveChatRenderer":\s*\{.*?"params":\s*"([^"]+)"', html, re.DOTALL)
+            if endpoint_match:
+                params = endpoint_match.group(1)
+
+        # Only raise "Sign in to chat" if we could NOT extract chat parameters!
+        if not params and "Sign in to chat" in html:
+            raise YouTubeAPIError(
+                "YouTube rejected the cookie session (page says 'Sign in to chat'). "
+                "This happens when cookies are copied from Console/document.cookie instead of DevTools Network tab, "
+                "omitting required HttpOnly cookies (HSID/SSID/LOGIN_INFO). "
+                "Please copy the full 'Cookie:' header from DevTools > Network tab > Request Headers.",
+                401,
+            )
+
+        if not api_key_match or not client_ver_match:
+            raise YouTubeAPIError("Could not parse YouTube parameters from stream. Make sure the video is a valid live stream.")
+
+        api_key = api_key_match.group(1)
+        client_version = client_ver_match.group(1)
+
+        if not params:
+            raise YouTubeAPIError(
+                "Could not extract live chat submission parameters. "
+                "Make sure your YouTube cookie has active channel permissions and the stream allows live chat.",
+                429,
+            )
+
+        params = urllib.parse.unquote(params)
+
+        session_index = None
+        delegated_session_id = None
+        for m in re.finditer(r"ytcfg\.set\(\s*(\{.*?\})\s*\);", html, re.DOTALL):
+            try:
+                cfg = json.loads(m.group(1))
+                if "SESSION_INDEX" in cfg and cfg["SESSION_INDEX"] is not None:
+                    session_index = str(cfg["SESSION_INDEX"])
+                if "DELEGATED_SESSION_ID" in cfg and cfg["DELEGATED_SESSION_ID"]:
+                    delegated_session_id = str(cfg["DELEGATED_SESSION_ID"])
+            except Exception:
+                pass
+
+        if session_index is None:
+            m_si = re.search(r'"SESSION_INDEX":\s*"?([0-9]+)"?', html)
+            if m_si:
+                session_index = m_si.group(1)
+            elif "authuser=" in cookie_string:
+                m_auth = re.search(r'authuser=(\d+)', cookie_string)
+                if m_auth:
+                    session_index = m_auth.group(1)
+
+        if not delegated_session_id:
+            m_del = re.search(r'"DELEGATED_SESSION_ID":\s*"([^"]+)"', html)
+            if m_del:
+                delegated_session_id = m_del.group(1)
+
+        session_params = {
+            "api_key": api_key,
+            "client_version": client_version,
+            "params": params,
+            "session_index": session_index,
+            "delegated_session_id": delegated_session_id,
+            "cached_at": time.time(),
+        }
+        _innertube_cache[cache_key] = session_params
+        return session_params
 
     try:
         async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
-            resp = await client.get(url, headers=headers)
-            if resp.status_code in (401, 403):
-                raise YouTubeAPIError("YouTube Cookie expired or unauthorized (HTTP 401/403). Please update your YouTube Cookie.", 401)
-            if resp.status_code != 200:
-                raise YouTubeAPIError(f"Failed to load YouTube live chat page (HTTP {resp.status_code})", resp.status_code)
+            session = _innertube_cache.get(cache_key)
+            if not session or (time.time() - session.get("cached_at", 0) > 3600):
+                session = await _fetch_session_params(client)
 
-            html = resp.text
-            if "Sign in to chat" in html:
-                raise YouTubeAPIError(
-                    "YouTube rejected the cookie session (page says 'Sign in to chat'). "
-                    "This happens when cookies are copied from Console/document.cookie instead of DevTools Network tab, "
-                    "omitting required HttpOnly cookies (HSID/SSID/LOGIN_INFO). "
-                    "Please copy the full 'Cookie:' header from DevTools > Network tab > Request Headers.",
-                    401,
-                )
-
-            api_key_match = re.search(r'"INNERTUBE_API_KEY":\s*"([^"]+)"', html)
-            client_ver_match = re.search(r'"INNERTUBE_CLIENT_VERSION":\s*"([^"]+)"', html)
-
-            if not api_key_match or not client_ver_match:
-                # Fallback to main watch page
-                alt_url = f"https://www.youtube.com/watch?v={video_id}"
-                resp_alt = await client.get(alt_url, headers=headers)
-                if resp_alt.status_code == 200:
-                    html_alt = resp_alt.text
-                    api_key_match = api_key_match or re.search(r'"INNERTUBE_API_KEY":\s*"([^"]+)"', html_alt)
-                    client_ver_match = client_ver_match or re.search(r'"INNERTUBE_CLIENT_VERSION":\s*"([^"]+)"', html_alt)
-                    if api_key_match and client_ver_match:
-                        html = html_alt
-
-            if not api_key_match or not client_ver_match:
-                raise YouTubeAPIError("Could not parse YouTube parameters from stream. Make sure the video is a valid live stream.")
-
-            api_key = api_key_match.group(1)
-            client_version = client_ver_match.group(1)
-
-            params = None
-            yt_initial_data = None
-            match = re.search(r'window\["ytInitialData"\]\s*=\s*(\{.*?\});</script>', html) or \
-                    re.search(r'var ytInitialData\s*=\s*(\{.*?\});</script>', html)
-            if match:
-                try:
-                    yt_initial_data = json.loads(match.group(1))
-                    params = _find_send_chat_params(yt_initial_data)
-                    if not params:
-                        restriction = _check_chat_restrictions(yt_initial_data)
-                        if restriction:
-                            raise YouTubeAPIError(f"Cannot chat on this live stream: {restriction}", 400)
-                except YouTubeAPIError:
-                    raise
-                except Exception:
-                    pass
-
-            if not params:
-                endpoint_match = re.search(r'"sendLiveChatMessageEndpoint":\s*\{.*?"params":\s*"([^"]+)"', html, re.DOTALL) or \
-                                 re.search(r'"liveChatRenderer":\s*\{.*?"params":\s*"([^"]+)"', html, re.DOTALL)
-                if endpoint_match:
-                    params = endpoint_match.group(1)
-
-            if not params:
-                raise YouTubeAPIError(
-                    "Could not extract live chat submission parameters. "
-                    "Make sure your YouTube cookie has active channel permissions and the stream allows live chat.",
-                    429,
-                )
-
-            params = urllib.parse.unquote(params)
+            api_key = session["api_key"]
+            client_version = session["client_version"]
+            params = session["params"]
+            session_index = session.get("session_index")
+            delegated_session_id = session.get("delegated_session_id")
 
             now_ts = int(time.time())
             origin = "https://www.youtube.com"
             raw_str = f"{now_ts} {sapisid} {origin}"
             sha1 = hashlib.sha1(raw_str.encode("utf-8")).hexdigest()
             auth_header = f"SAPISIDHASH {now_ts}_{sha1}"
-
-            session_index = None
-            delegated_session_id = None
-            for m in re.finditer(r"ytcfg\.set\(\s*(\{.*?\})\s*\);", html, re.DOTALL):
-                try:
-                    cfg = json.loads(m.group(1))
-                    if "SESSION_INDEX" in cfg and cfg["SESSION_INDEX"] is not None:
-                        session_index = str(cfg["SESSION_INDEX"])
-                    if "DELEGATED_SESSION_ID" in cfg and cfg["DELEGATED_SESSION_ID"]:
-                        delegated_session_id = str(cfg["DELEGATED_SESSION_ID"])
-                except Exception:
-                    pass
-
-            if session_index is None:
-                m_si = re.search(r'"SESSION_INDEX":\s*"?([0-9]+)"?', html)
-                if m_si:
-                    session_index = m_si.group(1)
-                elif "authuser=" in cookie_string:
-                    m_auth = re.search(r'authuser=(\d+)', cookie_string)
-                    if m_auth:
-                        session_index = m_auth.group(1)
-
-            if not delegated_session_id:
-                m_del = re.search(r'"DELEGATED_SESSION_ID":\s*"([^"]+)"', html)
-                if m_del:
-                    delegated_session_id = m_del.group(1)
 
             post_headers = {
                 "User-Agent": user_agent,
@@ -386,6 +438,7 @@ async def send_innertube_live_chat_message(
 
             post_resp = await client.post(send_url, headers=post_headers, json=payload)
             if post_resp.status_code in (401, 403):
+                _innertube_cache.pop(cache_key, None)
                 err_detail = ""
                 try:
                     err_json = post_resp.json()
@@ -403,11 +456,14 @@ async def send_innertube_live_chat_message(
                     429,
                 )
             if post_resp.status_code not in (200, 201):
+                _innertube_cache.pop(cache_key, None)
                 raise YouTubeAPIError(f"InnerTube request failed (HTTP {post_resp.status_code}): {post_resp.text[:150]}", post_resp.status_code)
 
             res_data = post_resp.json()
             error_msg = res_data.get("error", {}).get("message")
             if error_msg:
+                if any(x in error_msg.lower() for x in ("expired", "invalid", "param")):
+                    _innertube_cache.pop(cache_key, None)
                 raise YouTubeAPIError(f"YouTube chat error: {error_msg}", 429)
 
             actions = res_data.get("actions", [])
