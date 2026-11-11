@@ -2,18 +2,23 @@
 {% block title %}Comment Bot — YouTube Live Automator{% endblock %}
 {% block content %}
 {% if not user %}
-<section class="card" style="text-align:center; padding: 2.5rem 1.5rem;">
-  <div style="width: 56px; height: 56px; border-radius: 16px; background: var(--yt-red-gradient); display: inline-flex; align-items: center; justify-content: center; margin-bottom: 1rem; box-shadow: 0 0 24px rgba(255, 0, 51, 0.45);">
-    <svg width="32" height="32" viewBox="0 0 24 24" fill="#fff">
+<section class="card" style="text-align:center; padding: 2.75rem 1.75rem;">
+  <div style="width: 58px; height: 58px; border-radius: 16px; background: var(--accent-gradient); color: var(--on-accent); display: inline-flex; align-items: center; justify-content: center; margin-bottom: 1.15rem; box-shadow: 0 0 26px rgba(34, 197, 94, 0.36);">
+    <svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor">
       <path d="M19.615 3.184c-3.604-.246-11.631-.245-15.23 0-3.897.266-4.356 2.62-4.385 8.816.029 6.185.484 8.549 4.385 8.816 3.6.245 11.626.246 15.23 0 3.897-.266 4.356-2.62 4.385-8.816-.029-6.185-.484-8.549-4.385-8.816zm-10.615 12.816v-8l8 3.993-8 4.007z"/>
     </svg>
   </div>
-  <h1 style="font-size: 1.6rem; font-weight: 800; margin-bottom: 0.5rem; letter-spacing: -0.02em;">Welcome to Comment Bot</h1>
-  <p class="muted" style="max-width: 480px; margin: 0 auto 1.5rem; font-size: 0.95rem;">
-    Automate live stream comments on YouTube with zero limits. Works 24/7 in the cloud on desktop or mobile.
+  <h1 style="font-size: 1.7rem; font-weight: 800; margin-bottom: 0.55rem; letter-spacing: -0.02em;">Welcome to Comment Bot</h1>
+  <p class="muted" style="max-width: 500px; margin: 0 auto 1.25rem; font-size: 0.96rem;">
+    Automate natural live stream comments on YouTube around the clock from desktop or mobile, with strict per-account isolation.
   </p>
+  <div class="hero-highlights">
+    <span class="hero-pill">24/7 Cloud Runner</span>
+    <span class="hero-pill">Isolated Multi-User Sessions</span>
+    <span class="hero-pill">Progressive Conversation Chats</span>
+  </div>
   <div style="display:flex; justify-content:center; gap:0.75rem; flex-wrap:wrap;">
-    <a class="btn btn-primary" href="/auth/google/login" style="font-size:1rem; padding: 0.85rem 1.75rem;">
+    <a class="btn btn-primary" href="/auth/google/login" style="font-size:1rem; padding: 0.88rem 1.85rem;">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
         <path d="M12.24 10.285V13.4h6.887C18.2 16.14 15.645 18 12.24 18c-3.315 0-6-2.685-6-6s2.685-6 6-6c1.47 0 2.805.54 3.84 1.425l2.4-2.4C16.89 3.51 14.7 2.6 12.24 2.6 7.02 2.6 2.8 6.82 2.8 12.04s4.22 9.44 9.44 9.44c5.445 0 9.1-3.825 9.1-9.28 0-.645-.06-1.26-.18-1.84h-8.92z"/>
       </svg>
@@ -21,27 +26,40 @@
     </a>
   </div>
   {% if settings.email_login_enabled %}
-  <p class="muted" style="margin-top:1.25rem; font-size: 0.82rem;">
-    <a href="/login" style="color:#94a3b8; text-decoration: underline;">Use email magic link instead</a>
+  <p class="muted" style="margin-top:1.3rem; font-size: 0.82rem;">
+    <a href="/login" style="color:var(--text-muted); text-decoration: underline;">Use email magic link instead</a>
   </p>
   {% endif %}
 </section>
 {% else %}
 
 {% if auth_error_msg %}
-<div class="card" style="background: rgba(239, 68, 68, 0.14); border: 1px solid rgba(239, 68, 68, 0.4); color: #fecaca; padding: 1rem 1.25rem; margin-bottom: 1.25rem;">
+<div class="card notice-banner">
   <strong>⚠️ Account Protection Notice:</strong> {{ auth_error_msg }}
 </div>
 {% endif %}
 
-<!-- Active Account Banner -->
-<div class="card" style="padding: 0.85rem 1.15rem; margin-bottom: 1rem; display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; border-left: 4px solid #10b981;">
-  <div style="font-size: 0.84rem; color: var(--text-muted);">
-    <span style="color: #34d399; font-weight: 700;">🔒 Isolated Session Active:</span>
-    <strong style="color: var(--text-main);">{{ user.email }}</strong>
-    {% if oauth and oauth.google_email and oauth.google_email != user.email %}
-      <span class="muted"> • Linked YouTube: <strong>{{ oauth.google_email }}</strong></span>
-    {% endif %}
+<!-- Active Account & Readiness Banner -->
+<div class="card session-banner">
+  <div style="display:flex; flex-direction:column; gap:0.35rem;">
+    <div style="font-size: 0.85rem; color: var(--text-muted);">
+      <span style="color: var(--accent-soft); font-weight: 700;">🔒 Isolated Session:</span>
+      <strong style="color: var(--text-main);">{{ user.email }}</strong>
+      {% if oauth and oauth.google_email and oauth.google_email != user.email %}
+        <span class="muted"> • YouTube: <strong>{{ oauth.google_email }}</strong></span>
+      {% endif %}
+    </div>
+    <div class="session-readiness-pills">
+      {% if has_cookie %}
+      <span class="engine-card-badge badge-green">✓ Cookie Ready</span>
+      {% endif %}
+      {% if oauth %}
+      <span class="engine-card-badge badge-green">✓ OAuth Linked</span>
+      {% endif %}
+      {% if not has_cookie and not oauth %}
+      <span class="engine-card-badge badge-gold">Setup needed below</span>
+      {% endif %}
+    </div>
   </div>
   <a href="/auth/google/login" class="btn btn-ghost btn-sm" title="Sign in as a different Google account without affecting this account's running bot">
     🔄 Switch Google Account
@@ -57,12 +75,12 @@
   </div>
   <div class="stat-box">
     <span class="stat-label">Today's Activity</span>
-    <span id="stat-today" class="stat-value">{{ job.messages_sent_today if job else 0 }}</span>
+    <span id="stat-today" class="stat-value" style="color: var(--accent-soft);">{{ job.messages_sent_today if job else 0 }}</span>
     <span id="stat-quota-badge" class="stat-sub">{% if job and job.mode == 'cookie' %}Unlimited (Cookie){% else %}API quota ~50/day{% endif %}</span>
   </div>
   <div class="stat-box">
     <span class="stat-label">Engine Mode</span>
-    <span id="stat-mode" class="stat-value" style="font-size: 1.1rem; text-transform: uppercase;">{{ job.mode if job else ('cookie' if has_cookie else 'oauth') }}</span>
+    <span id="stat-mode" class="stat-value" style="font-size: 1.12rem; text-transform: uppercase; color: var(--gold-soft);">{{ job.mode if job else ('cookie' if has_cookie else 'oauth') }}</span>
     <span id="stat-mode-sub" class="stat-sub">{% if has_cookie %}Web Cookie active{% elif oauth %}Google OAuth{% else %}Pending setup{% endif %}</span>
   </div>
   <div class="stat-box">
@@ -77,13 +95,13 @@
   <div class="card-header-row">
     <div>
       <h2 class="card-title">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="#ff0033">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="var(--accent-bright)">
           <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14.5v-9l6 4.5-6 4.5z"/>
         </svg>
         <span>Live Stream Bot Runner</span>
       </h2>
       <p class="card-subtitle" style="margin: 0.25rem 0 0;">
-        📱 <strong>Mobile Ready:</strong> Start the bot and lock your phone or close the browser — runs non-stop in the cloud!
+        📱 <strong>Mobile Ready:</strong> Start the bot and lock your phone or close the tab — your isolated runner continues in the cloud.
       </p>
     </div>
     <div id="runner-badge" class="status-chip idle">
@@ -97,19 +115,19 @@
     <div class="form-group">
       <div class="field-label">
         <label for="stream_url">Target YouTube Live Stream URL</label>
-        <span id="save-indicator" style="font-size:0.75rem; color:#10b981; font-weight:700; opacity:0; transition:opacity 0.3s ease;">✓ Kept & saved permanently</span>
+        <span id="save-indicator" style="font-size:0.75rem; color:var(--accent-bright); font-weight:700; opacity:0; transition:opacity 0.3s ease;">✓ Kept &amp; saved permanently</span>
       </div>
       <div class="input-with-actions input-icon-wrapper has-prefix">
         <span class="input-prefix-icon">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="#ff0033">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="var(--accent-mint)">
             <path d="M10 15l5.19-3L10 9v6m11.56-7.83c.13.47.22 1.1.28 1.9.07.8.1 1.49.1 2.09L22 12c0 2.19-.16 3.8-.44 4.83-.25.9-.83 1.48-1.73 1.73-.47.13-1.33.22-2.65.28-1.3.07-2.49.1-3.59.1L12 19c-4.19 0-6.8-.16-7.83-.44-.9-.25-1.48-.83-1.73-1.73-.13-.47-.22-1.1-.28-1.9-.07-.8-.1-1.49-.1-2.09L2 12c0-2.19.16-3.8.44-4.83.25-.9.83-1.48 1.73-1.73.47-.13 1.33-.22 2.65-.28 1.3-.07 2.49-.1 3.59-.1L12 5c4.19 0 6.8.16 7.83.44.9.25 1.48.83 1.73 1.73z"/>
           </svg>
         </span>
         <input id="stream_url" name="stream_url" type="url" placeholder="Paste link: https://www.youtube.com/watch?v=... or https://youtube.com/live/..." value="{{ job.stream_url if job and job.stream_url else '' }}" required autocomplete="off">
-        <button type="button" id="btn-paste-link" class="btn btn-ghost btn-sm" title="Paste from clipboard" style="padding: 0.5rem 0.75rem;">
+        <button type="button" id="btn-paste-link" class="btn btn-ghost btn-sm" title="Paste from clipboard" style="padding: 0.52rem 0.78rem;">
           📋 Paste
         </button>
-        <button type="button" id="btn-save-link" class="btn btn-ghost btn-sm" title="Save this link permanently until updated" style="border-color: rgba(255,255,255,0.2);">
+        <button type="button" id="btn-save-link" class="btn btn-ghost btn-sm" title="Save this link permanently until updated">
           💾 Save
         </button>
       </div>
@@ -122,7 +140,7 @@
           <div class="video-meta">
             <span>Video ID:</span>
             <span class="video-pill" id="video-preview-id">--------</span>
-            <a id="video-preview-link" href="#" target="_blank" rel="noreferrer" style="color: #60a5fa; text-decoration: none; margin-left: auto;">
+            <a id="video-preview-link" href="#" target="_blank" rel="noreferrer" class="stream-ext-link">
               Open Stream ↗
             </a>
           </div>
@@ -134,29 +152,34 @@
     <div class="form-group">
       <label class="field-label">Commenting Engine Mode</label>
       <input type="hidden" id="mode" name="mode" value="{{ job.mode if job and job.mode else ('cookie' if has_cookie else 'oauth') }}">
-      
+
       <div class="engine-options">
-        <div id="engine-cookie" class="engine-card {% if (job and job.mode == 'cookie') or (not job and has_cookie) %}active{% endif %}" onclick="selectMode('cookie')">
+        <div id="engine-cookie" tabindex="0" role="button" class="engine-card {% if (job and job.mode == 'cookie') or (not job and has_cookie) %}active{% endif %}" onclick="selectMode('cookie')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();selectMode('cookie');}">
           <span class="engine-card-icon">⚡</span>
           <div class="engine-card-content">
             <div class="engine-card-title">
               <span>Web Cookie Mode</span>
-              <span class="engine-card-badge badge-green">Unlimited 🎉</span>
+              <span class="engine-card-badge badge-green">Unlimited</span>
             </div>
-            <p class="engine-card-desc">100% quota-free. Sends unlimited comments using your desktop browser session cookies.</p>
+            <p class="engine-card-desc">100% quota-free. Sends unlimited comments using your synced browser session cookies.</p>
           </div>
         </div>
 
-        <div id="engine-oauth" class="engine-card {% if (job and job.mode == 'oauth') or (not job and not has_cookie) %}active{% endif %}" onclick="selectMode('oauth')">
+        <div id="engine-oauth" tabindex="0" role="button" class="engine-card {% if (job and job.mode == 'oauth') or (not job and not has_cookie) %}active{% endif %}" onclick="selectMode('oauth')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();selectMode('oauth');}">
           <span class="engine-card-icon">🔑</span>
           <div class="engine-card-content">
             <div class="engine-card-title">
               <span>Google OAuth API</span>
-              <span class="engine-card-badge badge-blue">Official</span>
+              <span class="engine-card-badge badge-gold">Official API</span>
             </div>
-            <p class="engine-card-desc">Runs directly from the cloud without needing any cookies. Subject to standard YouTube API limits.</p>
+            <p class="engine-card-desc">Runs directly from the cloud without browser cookies. Subject to standard YouTube API quota.</p>
           </div>
         </div>
+      </div>
+
+      <div id="engine-readiness-hint" class="readiness-hint">
+        <span id="engine-readiness-text"></span>
+        <button type="button" id="engine-readiness-action" class="btn btn-ghost btn-sm" style="border-color: var(--gold-border); color: var(--gold-soft);"></button>
       </div>
     </div>
 
@@ -164,13 +187,13 @@
     <div class="form-group">
       <div class="field-label">
         <span>Comment Frequency (Interval)</span>
-        <span class="muted" id="interval-label-hint">Every 30 seconds</span>
+        <span class="muted" id="interval-label-hint">Every {{ job.interval_seconds if job and job.interval_seconds else 30 }} seconds</span>
       </div>
       <input type="hidden" id="interval_seconds" name="interval_seconds" value="{{ job.interval_seconds if job and job.interval_seconds else 30 }}">
-      
+
       <div class="presets-row">
         <button type="button" class="preset-chip {% if job and job.interval_seconds == 5 %}active{% endif %}" data-val="5">⚡ 5s (Ultra)</button>
-        <button type="button" class="preset-chip {% if job and job.interval_seconds == 10 %}active{% endif %}" data-val="10">🔥 10s (Fast)</button>
+        <button type="button" class="preset-chip {% if job and job.interval_seconds == 10 %}active{% endif %}" data-val="10">✦ 10s (Fast)</button>
         <button type="button" class="preset-chip {% if job and job.interval_seconds == 15 %}active{% endif %}" data-val="15">15s (~240/hr)</button>
         <button type="button" class="preset-chip {% if (not job and 30 == 30) or (job and job.interval_seconds == 30) %}active{% endif %}" data-val="30">30s (Standard)</button>
         <button type="button" class="preset-chip {% if job and job.interval_seconds == 60 %}active{% endif %}" data-val="60">60s (1 min)</button>
@@ -189,26 +212,35 @@
       </button>
 
       <button type="button" id="btn-stop" class="btn btn-stop-bot">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor">
           <path d="M6 6h12v12H6z"/>
         </svg>
         <span>Stop</span>
       </button>
 
-      <button type="button" id="btn-test-comment" class="btn btn-ghost" title="Generate a live test comment from your phrase pool" style="font-size: 0.85rem;">
-        🎲 Test Comment
+      <button type="button" id="btn-test-comment" class="btn btn-ghost" title="Preview a generated comment from the conversation database or your custom pool" style="font-size: 0.86rem;">
+        💬 Test Comment
       </button>
+    </div>
+
+    <!-- Inline Sample Preview Drawer -->
+    <div id="sample-preview-box" class="sample-preview-box">
+      <div style="min-width:0; flex:1;">
+        <div class="sample-preview-label">Sample Generated Comment</div>
+        <div id="sample-preview-text" style="word-break:break-word;"></div>
+      </div>
+      <button type="button" id="btn-sample-again" class="btn btn-ghost btn-sm" style="flex-shrink:0;">↻ Next</button>
     </div>
   </form>
 
   <!-- Live Status & Activity Monitor -->
   <div class="status-panel-wrapper">
     <div class="status-panel-header">
-      <span style="display:flex; align-items:center; gap:0.4rem;">
-        <span class="status-dot" id="monitor-pulse-dot" style="background:#94a3b8; width:7px; height:7px; border-radius:50%;"></span>
+      <span style="display:flex; align-items:center; gap:0.45rem;">
+        <span class="status-dot" id="monitor-pulse-dot" style="background:var(--text-dim); width:7px; height:7px; border-radius:50%;"></span>
         <span>Live Runner Status</span>
       </span>
-      <span id="bot-elapsed-time" style="font-family:'JetBrains Mono', monospace; color:#34d399;">Idle</span>
+      <span id="bot-elapsed-time" style="font-family:'JetBrains Mono', monospace; color:var(--accent-soft);">Idle</span>
     </div>
     <div id="bot-status" class="status-panel-content">
       <dl class="status-dl">
@@ -228,28 +260,28 @@
 </section>
 
 <!-- Credentials & Accounts Overview Card -->
-<section class="card conn-card {% if oauth or has_cookie %}active{% endif %}">
+<section id="credentials-section" class="card conn-card {% if oauth or has_cookie %}active{% endif %}">
   <div class="card-header-row">
     <div>
       <h2 class="card-title">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent-bright)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
           <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
         </svg>
         <span>Connected Credentials</span>
       </h2>
       <p class="card-subtitle" style="margin: 0.25rem 0 0;">
-        Credentials are encrypted, retained forever, and auto-refreshed in the background.
+        Credentials are encrypted, scoped strictly to your account, and auto-refreshed in the background.
       </p>
     </div>
   </div>
 
-  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 0.85rem;">
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 0.9rem;">
     <!-- Google OAuth Account -->
-    <div style="background: rgba(10, 15, 26, 0.65); border: 1px solid rgba(255,255,255,0.08); border-radius: var(--radius-md); padding: 1rem;">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
-        <span style="font-weight:700; font-size:0.9rem; display:flex; align-items:center; gap:0.4rem;">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+    <div class="conn-subcard">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.55rem;">
+        <span style="font-weight:700; font-size:0.9rem; display:flex; align-items:center; gap:0.45rem;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="var(--accent-bright)">
             <path d="M12.24 10.285V13.4h6.887C18.2 16.14 15.645 18 12.24 18c-3.315 0-6-2.685-6-6s2.685-6 6-6c1.47 0 2.805.54 3.84 1.425l2.4-2.4C16.89 3.51 14.7 2.6 12.24 2.6 7.02 2.6 2.8 6.82 2.8 12.04s4.22 9.44 9.44 9.44c5.445 0 9.1-3.825 9.1-9.28 0-.645-.06-1.26-.18-1.84h-8.92z"/>
           </svg>
           <span>Google YouTube API</span>
@@ -257,12 +289,12 @@
         {% if oauth %}
         <span class="engine-card-badge badge-green">✓ Active</span>
         {% else %}
-        <span class="engine-card-badge" style="background:rgba(148,163,184,0.15); color:#94a3b8;">Not linked</span>
+        <span class="engine-card-badge badge-neutral">Not linked</span>
         {% endif %}
       </div>
-      <p class="muted" style="font-size:0.8rem; margin-bottom:0.85rem;">
+      <p class="muted" style="font-size:0.8rem; margin-bottom:0.9rem; flex:1;">
         {% if oauth and oauth.google_email %}
-        Linked to <strong>{{ oauth.google_email }}</strong>. Ready for cloud runner.
+        Linked to <strong style="color:var(--text-main);">{{ oauth.google_email }}</strong>. Ready for cloud runner.
         {% else %}
         Link your Google account once for seamless API commenting from mobile.
         {% endif %}
@@ -280,20 +312,20 @@
     </div>
 
     <!-- YouTube Web Cookie -->
-    <div style="background: rgba(10, 15, 26, 0.65); border: 1px solid rgba(255,255,255,0.08); border-radius: var(--radius-md); padding: 1rem;">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
-        <span style="font-weight:700; font-size:0.9rem; display:flex; align-items:center; gap:0.4rem;">
+    <div class="conn-subcard">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.55rem;">
+        <span style="font-weight:700; font-size:0.9rem; display:flex; align-items:center; gap:0.45rem;">
           <span>⚡ YouTube Web Cookie</span>
         </span>
         {% if has_cookie %}
-        <span class="engine-card-badge badge-green">✓ Synced & Ready</span>
+        <span class="engine-card-badge badge-green">✓ Synced &amp; Ready</span>
         {% else %}
-        <span class="engine-card-badge" style="background:rgba(245,158,11,0.15); color:#fbbf24;">Action optional</span>
+        <span class="engine-card-badge badge-gold">Action optional</span>
         {% endif %}
       </div>
-      <p class="muted" style="font-size:0.8rem; margin-bottom:0.85rem;">
+      <p class="muted" style="font-size:0.8rem; margin-bottom:0.9rem; flex:1;">
         {% if has_cookie %}
-        Active and saved for <strong>{{ user.email }}</strong>. Enables quota-free comments around the clock.
+        Active and saved for <strong style="color:var(--text-main);">{{ user.email }}</strong>. Enables quota-free comments around the clock.
         {% else %}
         Auto-sync via the included Chrome extension for unlimited comments.
         {% endif %}
@@ -305,12 +337,13 @@
   </div>
 
   <!-- Collapsible Cookie Management Box -->
-  <div id="cookie-manager-box" style="display:none; margin-top:1.25rem; padding-top:1rem; border-top:1px solid rgba(255,255,255,0.08);">
-    <div style="background:rgba(59,130,246,0.1); border:1px solid rgba(59,130,246,0.25); border-radius:var(--radius-sm); padding:0.75rem 1rem; margin-bottom:1rem; font-size:0.82rem; color:#93c5fd; line-height:1.45;">
+  <div id="cookie-manager-box" style="display:none; margin-top:1.25rem; padding-top:1.05rem; border-top:1px solid var(--card-border);">
+    <div class="sync-key-box">
       <strong>🔐 Personal Extension Sync Key (Required for Multi-User Security):</strong> Paste this key into your Chrome extension so it syncs cookies strictly to <strong>{{ user.email }}</strong> and never mixes with other users.
-      <div style="display:flex; gap:0.5rem; margin-top:0.6rem; align-items:center; flex-wrap:wrap;">
-        <input id="extension-sync-token" type="text" readonly value="{{ sync_token or '' }}" style="flex:1; min-width:200px; font-family:'JetBrains Mono', monospace; font-size:0.78rem; padding:0.45rem 0.65rem;">
-        <button type="button" class="btn btn-ghost btn-sm" onclick="copySyncToken()">📋 Copy Key</button>
+      <div style="display:flex; gap:0.5rem; margin-top:0.65rem; align-items:center; flex-wrap:wrap;">
+        <input id="extension-sync-token" type="password" readonly value="{{ sync_token or '' }}" style="flex:1; min-width:200px; font-family:'JetBrains Mono', monospace; font-size:0.78rem; padding:0.48rem 0.7rem;">
+        <button type="button" id="btn-toggle-sync-token" class="btn btn-ghost btn-sm" onclick="toggleSyncTokenVisibility()">👁 Show</button>
+        <button type="button" id="btn-copy-sync-token" class="btn btn-ghost btn-sm" onclick="copySyncToken()">📋 Copy Key</button>
         <button type="button" class="btn btn-ghost btn-sm" onclick="rotateSyncToken()">🔄 Regenerate</button>
       </div>
     </div>
@@ -330,13 +363,13 @@
   <div class="card-header-row">
     <div>
       <h2 class="card-title">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent-bright)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
         </svg>
         <span>Comment Phrases Pool</span>
       </h2>
       <p class="card-subtitle" style="margin: 0.25rem 0 0;">
-        Includes the built-in <strong>Conversation Chat Database</strong> ("How are you?" &rarr; Check-in &rarr; Topic Openers &rarr; Building a Conversation: {{ conversation_stats.total_stage_phrases }} phrases &amp; {{ conversation_stats.conversation_arcs }} arcs) plus your custom phrases.
+        Powered by the built-in <strong>Conversation Chat Database</strong> ({{ conversation_stats.total_stage_phrases }} phrases &amp; {{ conversation_stats.conversation_arcs }} arcs) plus your personal custom phrases.
       </p>
     </div>
     <span class="user-pill" style="font-family:'JetBrains Mono', monospace; font-size:0.75rem;">
@@ -344,8 +377,17 @@
     </span>
   </div>
 
+  <div class="stage-flow" aria-label="Progressive conversation stages">
+    <span class="stage-pill">1. How are you</span>
+    <span class="stage-pill">2. Warm-up</span>
+    <span class="stage-pill">3. Topic Openers</span>
+    <span class="stage-pill">4. Conversation Builders</span>
+    <span class="stage-pill">5. Deepening &amp; Keep Alive</span>
+    <span class="stage-pill arc">{{ conversation_stats.conversation_arcs }} Multi-Turn Arcs</span>
+  </div>
+
   <form id="phrase-add-form" class="phrase-input-row" onsubmit="handleAddPhrase(event)">
-    <input id="input-new-phrase" name="phrase" maxlength="200" placeholder="Type a custom comment (e.g. 'Love the stream! 🔥')..." autocomplete="off" required style="flex:1;">
+    <input id="input-new-phrase" name="phrase" maxlength="200" placeholder="Type a custom comment (e.g. 'Hey! How is your day going?')..." autocomplete="off" required style="flex:1;">
     <button type="submit" class="btn btn-ghost" style="white-space:nowrap;">
       ➕ Add Phrase
     </button>
@@ -367,7 +409,7 @@
       </div>
       {% endfor %}
     {% else %}
-      <p id="empty-phrases-notice" class="muted" style="font-size:0.85rem; padding: 0.5rem 0;">No custom phrases yet. Built-in diverse pool is used automatically!</p>
+      <p id="empty-phrases-notice" class="muted" style="font-size:0.85rem; padding: 0.5rem 0;">No custom phrases yet. Progressive conversation pool is active automatically.</p>
     {% endif %}
   </div>
 </section>
@@ -376,6 +418,8 @@
 <script>
 const CURRENT_USER_ID = {{ user.id }};
 const CURRENT_USER_EMAIL = {{ user.email | tojson }};
+const HAS_COOKIE = {{ 'true' if has_cookie else 'false' }};
+const HAS_OAUTH = {{ 'true' if oauth else 'false' }};
 const STORAGE_PREFIX = `commentbot_u${CURRENT_USER_ID}_`;
 
 function apiHeaders(extra = {}) {
@@ -391,7 +435,6 @@ function handleSessionGuard(res) {
 }
 
 // Elements
-const statusEl = document.getElementById('bot-status');
 const streamUrlEl = document.getElementById('stream_url');
 const saveIndicatorEl = document.getElementById('save-indicator');
 const btnSaveLink = document.getElementById('btn-save-link');
@@ -401,11 +444,16 @@ const intervalInput = document.getElementById('interval_seconds');
 const btnStart = document.getElementById('btn-start');
 const btnStop = document.getElementById('btn-stop');
 const btnTestComment = document.getElementById('btn-test-comment');
+const btnSampleAgain = document.getElementById('btn-sample-again');
+const samplePreviewBox = document.getElementById('sample-preview-box');
+const samplePreviewText = document.getElementById('sample-preview-text');
+const engineReadinessHint = document.getElementById('engine-readiness-hint');
+const engineReadinessText = document.getElementById('engine-readiness-text');
+const engineReadinessAction = document.getElementById('engine-readiness-action');
 
 // Video preview elements
 const videoPreviewBox = document.getElementById('video-preview-box');
 const videoPreviewThumb = document.getElementById('video-preview-thumb');
-const videoPreviewTitle = document.getElementById('video-preview-title');
 const videoPreviewId = document.getElementById('video-preview-id');
 const videoPreviewLink = document.getElementById('video-preview-link');
 
@@ -417,7 +465,6 @@ const botElapsedTime = document.getElementById('bot-elapsed-time');
 const statTotal = document.getElementById('stat-total');
 const statToday = document.getElementById('stat-today');
 const statMode = document.getElementById('stat-mode');
-const statModeSub = document.getElementById('stat-mode-sub');
 const statInterval = document.getElementById('stat-interval');
 const statRate = document.getElementById('stat-rate');
 const monitorPulseDot = document.getElementById('monitor-pulse-dot');
@@ -425,16 +472,22 @@ const monitorPulseDot = document.getElementById('monitor-pulse-dot');
 let botStartTime = null;
 let botTimerInterval = null;
 
-// Toast helper
+// Toast helper (XSS-safe text rendering)
 function showToast(text, type = 'success') {
   const container = document.getElementById('toast-container');
   if (!container) return;
   const t = document.createElement('div');
   t.className = `toast ${type}`;
   let icon = '✓';
-  if (type === 'error') icon = '✕';
-  else if (type === 'info') icon = 'ℹ';
-  t.innerHTML = `<span style="font-weight:700;">${icon}</span><span>${text}</span>`;
+  if (type === 'error') icon = '!';
+  else if (type === 'info') icon = '💬';
+  const iconSpan = document.createElement('span');
+  iconSpan.style.fontWeight = '700';
+  iconSpan.textContent = icon;
+  const textSpan = document.createElement('span');
+  textSpan.textContent = text;
+  t.appendChild(iconSpan);
+  t.appendChild(textSpan);
   container.appendChild(t);
   setTimeout(() => {
     t.style.opacity = '0';
@@ -453,6 +506,30 @@ function showSavedNotice(msg = '✓ Kept & saved permanently') {
   window._saveTimer = setTimeout(() => {
     saveIndicatorEl.style.opacity = '0';
   }, 2500);
+}
+
+// Engine readiness helper
+function updateEngineReadiness(targetMode) {
+  if (!engineReadinessHint) return;
+  if (targetMode === 'cookie' && !HAS_COOKIE) {
+    engineReadinessText.textContent = 'Web Cookie Mode needs synced YouTube cookies for this account first.';
+    engineReadinessAction.textContent = 'Setup Cookie / Sync Key ↓';
+    engineReadinessAction.onclick = () => {
+      const box = document.getElementById('cookie-manager-box');
+      if (box) box.style.display = 'block';
+      document.getElementById('credentials-section')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    };
+    engineReadinessHint.classList.add('visible');
+  } else if (targetMode === 'oauth' && !HAS_OAUTH) {
+    engineReadinessText.textContent = 'Google OAuth API needs Google account authorization for YouTube access.';
+    engineReadinessAction.textContent = 'Connect Google ↗';
+    engineReadinessAction.onclick = () => {
+      window.location.href = '/auth/google/start';
+    };
+    engineReadinessHint.classList.add('visible');
+  } else {
+    engineReadinessHint.classList.remove('visible');
+  }
 }
 
 // Extract Video ID helper
@@ -533,6 +610,7 @@ function selectMode(targetMode) {
   const card = document.getElementById(`engine-${targetMode}`);
   if (card) card.classList.add('active');
   if (statMode) statMode.textContent = targetMode.toUpperCase();
+  updateEngineReadiness(targetMode);
   persistRunnerSettings();
   showToast(`Switched engine to ${targetMode === 'cookie' ? 'Web Cookie (Quota-Free)' : 'Google OAuth API'}`);
 }
@@ -590,17 +668,34 @@ function toggleCookieDetails() {
   box.style.display = (box.style.display === 'none' || !box.style.display) ? 'block' : 'none';
 }
 
+function toggleSyncTokenVisibility() {
+  const el = document.getElementById('extension-sync-token');
+  const btn = document.getElementById('btn-toggle-sync-token');
+  if (!el || !btn) return;
+  const showing = el.type === 'text';
+  el.type = showing ? 'password' : 'text';
+  btn.textContent = showing ? '👁 Show' : '🙈 Hide';
+}
+
 async function copySyncToken() {
   const el = document.getElementById('extension-sync-token');
+  const btn = document.getElementById('btn-copy-sync-token');
   if (!el || !el.value) return;
   try {
     await navigator.clipboard.writeText(el.value);
-    showToast('✓ Personal Sync Key copied! Paste it into the Chrome extension.');
   } catch (_) {
+    const prevType = el.type;
+    el.type = 'text';
     el.select();
     document.execCommand('copy');
-    showToast('✓ Sync Key copied!');
+    el.type = prevType;
   }
+  if (btn) {
+    const oldText = btn.textContent;
+    btn.textContent = '✓ Copied!';
+    setTimeout(() => { btn.textContent = oldText; }, 1800);
+  }
+  showToast('✓ Personal Sync Key copied! Paste it into the Chrome extension.');
 }
 
 async function rotateSyncToken() {
@@ -638,6 +733,7 @@ async function handleAddPhrase(e) {
     const data = await res.json();
     if (res.ok && data.ok) {
       input.value = '';
+      input.focus();
       const notice = document.getElementById('empty-phrases-notice');
       if (notice) notice.remove();
 
@@ -692,21 +788,30 @@ async function handleDeletePhrase(id, text, el) {
   } catch (_) {}
 }
 
-btnTestComment.addEventListener('click', async () => {
+async function fetchSampleComment() {
   btnTestComment.disabled = true;
+  if (btnSampleAgain) btnSampleAgain.disabled = true;
   try {
     const r = await fetch('/api/bot/preview-sample', { headers: apiHeaders() });
     if (handleSessionGuard(r)) return;
     const data = await r.json();
     if (data.ok && data.message) {
-      showToast(`Sample comment: "${data.message}"`, 'info');
+      if (samplePreviewText && samplePreviewBox) {
+        samplePreviewText.textContent = `"${data.message}"`;
+        samplePreviewBox.classList.add('visible');
+      }
+      showToast(`Sample: "${data.message}"`, 'info');
     }
   } catch (_) {
     showToast('Could not generate sample comment', 'error');
   } finally {
     btnTestComment.disabled = false;
+    if (btnSampleAgain) btnSampleAgain.disabled = false;
   }
-});
+}
+
+btnTestComment.addEventListener('click', fetchSampleComment);
+if (btnSampleAgain) btnSampleAgain.addEventListener('click', fetchSampleComment);
 
 // Bot Run Control
 btnStart.addEventListener('click', async () => {
@@ -735,7 +840,7 @@ btnStart.addEventListener('click', async () => {
     if (!r.ok) {
       showToast(data.detail || 'Failed to start bot', 'error');
     } else {
-      showToast('🚀 Bot started successfully! Running in cloud.');
+      showToast('🚀 Bot started! Running in your isolated cloud worker.');
       refreshStatus();
     }
   } catch (err) {
@@ -791,7 +896,7 @@ async function refreshStatus() {
       topbarLiveStatus.querySelector('.status-label').textContent = '● RUNNING';
       runnerBadge.className = 'status-chip running';
       runnerBadgeText.textContent = 'Active Running';
-      monitorPulseDot.style.background = '#10b981';
+      monitorPulseDot.style.background = '#4ade80';
       btnStart.style.display = 'none';
       btnStop.style.display = 'inline-flex';
     } else {
@@ -802,7 +907,7 @@ async function refreshStatus() {
       topbarLiveStatus.querySelector('.status-label').textContent = 'Bot Idle';
       runnerBadge.className = 'status-chip idle';
       runnerBadgeText.textContent = data.status || 'Stopped';
-      monitorPulseDot.style.background = '#94a3b8';
+      monitorPulseDot.style.background = '#748279';
       btnStart.style.display = 'inline-flex';
       btnStop.style.display = 'none';
     }
@@ -837,13 +942,6 @@ async function refreshStatus() {
   } catch (_) {}
 }
 
-function escapeHtml(s) {
-  if (!s) return '';
-  const d = document.createElement('div');
-  d.textContent = s;
-  return d.innerHTML;
-}
-
 // Initial Setup on load
 document.addEventListener('DOMContentLoaded', () => {
   try {
@@ -858,6 +956,7 @@ document.addEventListener('DOMContentLoaded', () => {
       persistStreamUrl(cachedUrl);
     }
     updateVideoPreview(streamUrlEl.value);
+    updateEngineReadiness(modeInput ? modeInput.value : 'oauth');
   } catch (_) {}
 
   refreshStatus();

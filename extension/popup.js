@@ -185,14 +185,14 @@ async function checkYouTubeSession() {
       badgeStatus.className = "badge connected";
       badgeStatus.textContent = "Ready";
     } else {
-      ytDot.className = "dot amber";
+      ytDot.className = "dot gold";
       ytText.textContent = "YouTube login not detected";
       ytSubtext.textContent = "Open youtube.com and ensure you are logged in";
       badgeStatus.className = "badge";
       badgeStatus.textContent = "Sign-in required";
     }
   } catch (err) {
-    ytDot.className = "dot red";
+    ytDot.className = "dot gold";
     ytText.textContent = "Unable to inspect cookies";
     badgeStatus.className = "badge";
     badgeStatus.textContent = "Error";
@@ -230,7 +230,9 @@ function detectActiveYouTubeTab() {
       if (tabs && tabs[0] && tabs[0].url) {
         const url = tabs[0].url;
         if (url.includes("youtube.com/watch") || url.includes("youtube.com/live") || url.includes("youtu.be/")) {
-          btnUseTab.style.background = "#2563eb";
+          btnUseTab.style.background = "#166534";
+          btnUseTab.style.borderColor = "rgba(74, 222, 128, 0.45)";
+          btnUseTab.style.color = "#86efac";
           btnUseTab.onclick = () => {
             saveStreamUrl(url);
           };
