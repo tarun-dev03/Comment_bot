@@ -788,11 +788,12 @@ def test_conversation_chat_database_progression():
 
     gen = MessageGenerator()
     first = gen.next_message()
-    # Turn 0 must begin with a "how are you" greeting/check-in
+    # Turn 0 must begin with a Hinglish "kaise ho / how are you" greeting
     first_lower = first.lower()
-    assert any(k in first_lower for k in ("how are you", "kaise ho", "how's", "holding up", "feeling")), (
-        f"Expected opening message to be a 'how are you' greeting, got: {first}"
-    )
+    assert any(
+        k in first_lower
+        for k in ("kaise ho", "kaise hain", "kya haal", "how are you", "sab kaise", "kaise feel", "kaise chal")
+    ), f"Expected opening message to be a Hinglish greeting, got: {first}"
 
     # Generate 100 messages across all conversation stages with zero repeats
     messages = [first]

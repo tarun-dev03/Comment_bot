@@ -24,6 +24,8 @@ _CONVERSATIONAL_OPENERS = (
     "hey",
     "hi",
     "hello",
+    "yo ",
+    "hiya",
     "how ",
     "what",
     "where",
@@ -39,6 +41,31 @@ _CONVERSATIONAL_OPENERS = (
     "sab",
     "chalo",
     "main ",
+    "bhai",
+    "yaar",
+    "arre",
+    "waise",
+    "sach",
+    "sahi",
+    "bilkul",
+    "ekdum",
+    "ek ",
+    "haan",
+    "agar",
+    "kaun",
+    "kis",
+    "kahan",
+    "kab",
+    "kitna",
+    "batao",
+    "dekho",
+    "thoda",
+    "abhi",
+    "idhar",
+    "yahan",
+    "bada",
+    "maza",
+    "umeed",
     "good ",
     "hope ",
     "doing ",
@@ -219,7 +246,7 @@ class MessageGenerator:
         if self.conv_templates:
             return self._variate(self._from_conv_template(), allow_prefix=False), False
 
-        return self._variate("Hey everyone, how are you doing today?", allow_prefix=False), False
+        return self._variate("Hey sabko! Kaise ho sab log aaj?", allow_prefix=False), False
 
     def _register(self, text: str, used_arc: bool = False) -> str:
         cleaned = text.strip()[:200]
@@ -264,13 +291,13 @@ class MessageGenerator:
                 base = random.choice(pool)
                 candidate = self._variate(base)
             else:
-                candidate = self._variate("Hey everyone, how are you doing today?", allow_prefix=False)
+                candidate = self._variate("Hey sabko! Kaise ho sab log aaj?", allow_prefix=False)
 
             if not self.is_seen(candidate):
                 return self._register(candidate, used_arc=used_arc)
 
         all_conv = [p for plist in self.conv_stages.values() for p in plist]
         base_pool = self.custom_phrases or all_conv or self.default_fixed
-        base = random.choice(base_pool) if base_pool else "Great stream"
+        base = random.choice(base_pool) if base_pool else "Mast live chal raha hai yaar"
         suffix_tag = random.randint(100, 9999)
         return self._register(f"{base[:190]} #{suffix_tag}", used_arc=False)

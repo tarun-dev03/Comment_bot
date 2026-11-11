@@ -140,22 +140,22 @@ async def home(
     if db_error:
         return HTMLResponse(
             f"""<!DOCTYPE html><html><head><meta charset="utf-8"><title>Comment Bot — Database Setup</title></head>
-            <body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;padding:2rem;max-width:720px;margin:0 auto;line-height:1.6;background:#12110d;color:#f0ede0;">
-            <h1 style="color:#eadca0;margin-bottom:0.5rem;">Database Connection Notice</h1>
-            <p style="color:#b6b19c;">The database is currently unreachable. If your free Render PostgreSQL database expired (Render free databases expire after 30 days), you do <b>not</b> need to pay for premium!</p>
-            <div style="background:rgba(203,180,86,0.13);border:1px solid rgba(203,180,86,0.34);border-radius:10px;padding:1rem;margin:1rem 0;">
-                <b style="color:#eadca0;">Error details:</b>
-                <pre style="background:#1a1913;border:1px solid rgba(214,206,178,0.14);padding:0.75rem;border-radius:6px;overflow:auto;font-size:0.875rem;margin-top:0.5rem;color:#efe3b0;">{db_error}</pre>
+            <body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;padding:2rem;max-width:720px;margin:0 auto;line-height:1.6;background:#f6f4fb;color:#252236;">
+            <h1 style="color:#473187;margin-bottom:0.5rem;">Database Connection Notice</h1>
+            <p style="color:#5b5570;">The database is currently unreachable. If your free Render PostgreSQL database expired (Render free databases expire after 30 days), you do <b>not</b> need to pay for premium!</p>
+            <div style="background:#ffe7dc;border:1px solid #f8bea4;border-radius:10px;padding:1rem;margin:1rem 0;">
+                <b style="color:#7d3b22;">Error details:</b>
+                <pre style="background:#ffffff;border:1px solid rgba(114,99,158,0.16);padding:0.75rem;border-radius:6px;overflow:auto;font-size:0.875rem;margin-top:0.5rem;color:#7d3b22;">{db_error}</pre>
             </div>
             <h3>How to fix this for FREE:</h3>
-            <ol style="padding-left:1.25rem;color:#b6b19c;">
+            <ol style="padding-left:1.25rem;color:#5b5570;">
                 <li style="margin-bottom:0.75rem;">
-                    <b style="color:#f0ede0;">Option 1: Free permanent cloud Postgres (Recommended)</b><br>
-                    Create a free Postgres database on <a href="https://neon.tech" target="_blank" style="color:#bfd5a9;">Neon.tech</a> (free forever, 0.5 GB, 30s setup, no credit card required).<br>
+                    <b style="color:#252236;">Option 1: Free permanent cloud Postgres (Recommended)</b><br>
+                    Create a free Postgres database on <a href="https://neon.tech" target="_blank" style="color:#473187;font-weight:600;">Neon.tech</a> (free forever, 0.5 GB, 30s setup, no credit card required).<br>
                     Copy the connection string, go to your Render Web Service &rarr; <b>Environment</b> &rarr; set <code>DATABASE_URL</code> to the Neon URL &rarr; Save Changes.
                 </li>
                 <li style="margin-bottom:0.75rem;">
-                    <b style="color:#f0ede0;">Option 2: Local SQLite</b><br>
+                    <b style="color:#252236;">Option 2: Local SQLite</b><br>
                     In your Render Web Service &rarr; <b>Environment</b> &rarr; remove <code>DATABASE_URL</code> or set it to <code>sqlite+aiosqlite:///./comment_bot.db</code> &rarr; Save Changes.
                 </li>
             </ol>

@@ -13,10 +13,13 @@
     body {
       width: 348px;
       padding: 16px;
-      background: #12110d;
-      color: #f0ede0;
+      background-color: #f6f4fb;
+      background-image:
+        radial-gradient(circle at top left, rgba(169, 237, 211, 0.45) 0%, transparent 52%),
+        radial-gradient(circle at bottom right, rgba(213, 198, 255, 0.45) 0%, transparent 52%);
+      color: #252236;
       font-size: 13px;
-      color-scheme: dark;
+      color-scheme: light;
     }
     .header {
       display: flex;
@@ -24,7 +27,7 @@
       justify-content: space-between;
       margin-bottom: 14px;
       padding-bottom: 10px;
-      border-bottom: 1px solid rgba(214, 206, 178, 0.14);
+      border-bottom: 1px solid rgba(114, 99, 158, 0.16);
     }
     .title {
       font-weight: 700;
@@ -32,32 +35,33 @@
       display: flex;
       align-items: center;
       gap: 6px;
-      color: #f0ede0;
+      color: #252236;
     }
     .title-accent {
-      color: #bfd5a9;
+      color: #473187;
     }
     .badge {
       font-size: 10px;
-      background: rgba(203, 180, 86, 0.16);
-      color: #eadca0;
-      border: 1px solid rgba(203, 180, 86, 0.36);
+      background: #ffe7dc;
+      color: #7d3b22;
+      border: 1px solid #f8bea4;
       padding: 2px 8px;
       border-radius: 999px;
       font-weight: 600;
     }
     .badge.connected {
-      background: rgba(143, 179, 121, 0.18);
-      color: #bfd5a9;
-      border-color: rgba(143, 179, 121, 0.36);
+      background: #dcf8ec;
+      color: #11583e;
+      border-color: #9fe7c8;
     }
     .session-card {
-      background: #1c1b15;
-      border: 1px solid rgba(214, 206, 178, 0.12);
+      background: #ffffff;
+      border: 1px solid rgba(114, 99, 158, 0.16);
       border-radius: 10px;
       padding: 10px 12px;
       margin-bottom: 12px;
       font-size: 12px;
+      box-shadow: 0 4px 14px rgba(103, 86, 158, 0.06);
     }
     .session-status {
       display: flex;
@@ -70,12 +74,12 @@
       width: 8px;
       height: 8px;
       border-radius: 50%;
-      background: #878370;
+      background: #9f98b3;
     }
-    .dot.green { background: #8fb379; box-shadow: 0 0 8px rgba(143, 179, 121, 0.45); }
-    .dot.gold { background: #cbb456; }
+    .dot.green { background: #27a876; box-shadow: 0 0 8px rgba(39, 168, 118, 0.35); }
+    .dot.gold { background: #e89b3c; }
     .muted {
-      color: #b6b19c;
+      color: #5b5570;
       font-size: 11px;
     }
     .field {
@@ -85,16 +89,16 @@
       display: block;
       font-size: 11px;
       font-weight: 600;
-      color: #b6b19c;
+      color: #5b5570;
       margin-bottom: 4px;
       text-transform: uppercase;
       letter-spacing: 0.45px;
     }
     input, select {
       width: 100%;
-      background: #181712;
-      border: 1px solid rgba(214, 206, 178, 0.16);
-      color: #f0ede0;
+      background: #ffffff;
+      border: 1px solid rgba(114, 99, 158, 0.22);
+      color: #252236;
       padding: 8px 10px;
       border-radius: 8px;
       font-size: 12px;
@@ -102,8 +106,8 @@
       transition: border-color 0.2s, box-shadow 0.2s;
     }
     input:focus, select:focus {
-      border-color: #a4c686;
-      box-shadow: 0 0 0 2px rgba(143, 179, 121, 0.20);
+      border-color: #84d3b6;
+      box-shadow: 0 0 0 3px rgba(156, 235, 208, 0.35);
     }
     .row {
       display: flex;
@@ -118,18 +122,21 @@
       cursor: pointer;
       font-size: 12px;
       font-weight: 500;
+      color: #252236;
+      text-transform: none;
+      letter-spacing: 0;
     }
     .toggle-checkbox {
       width: 16px;
       height: 16px;
-      accent-color: #8fb379;
+      accent-color: #6b52ae;
       cursor: pointer;
     }
     .btn {
       width: 100%;
-      background: linear-gradient(135deg, #628656 0%, #84a96d 55%, #a2be7c 100%);
-      color: #10150d;
-      border: none;
+      background: linear-gradient(135deg, #9cebd0 0%, #a9d8fc 52%, #cbb8fe 100%);
+      color: #1e1930;
+      border: 1px solid rgba(114, 99, 158, 0.14);
       padding: 10px;
       border-radius: 8px;
       font-weight: 700;
@@ -139,10 +146,11 @@
       justify-content: center;
       gap: 6px;
       font-size: 13px;
+      box-shadow: 0 4px 12px rgba(164, 178, 245, 0.30);
       transition: filter 0.2s, transform 0.15s;
     }
     .btn:hover:not(:disabled) {
-      filter: brightness(1.06);
+      filter: brightness(0.97);
     }
     .btn:disabled {
       opacity: 0.6;
@@ -153,25 +161,27 @@
       padding: 7px 8px;
       font-size: 11px;
       font-weight: 600;
-      background: #232119;
-      color: #dfd5b2;
-      border: 1px solid rgba(196, 184, 141, 0.24);
+      background: #f2edff;
+      color: #473187;
+      border: 1px solid #cdbefe;
+      box-shadow: none;
     }
     .btn-sub:hover:not(:disabled) {
-      background: #2d2a1f;
-      border-color: rgba(196, 184, 141, 0.42);
+      background: #e8e0ff;
+      border-color: #b7a2fc;
     }
     .btn-sub-save {
       flex: 1;
       padding: 7px 8px;
       font-size: 11px;
       font-weight: 600;
-      background: rgba(143, 179, 121, 0.15);
-      color: #bfd5a9;
-      border: 1px solid rgba(143, 179, 121, 0.34);
+      background: #dcf8ec;
+      color: #11583e;
+      border: 1px solid #9fe7c8;
+      box-shadow: none;
     }
     .btn-sub-save:hover:not(:disabled) {
-      background: rgba(143, 179, 121, 0.24);
+      background: #c9f2e1;
     }
     .status-msg {
       margin-top: 10px;
@@ -183,26 +193,26 @@
     }
     .status-msg.success {
       display: block;
-      background: rgba(143, 179, 121, 0.14);
-      color: #bfd5a9;
-      border: 1px solid rgba(143, 179, 121, 0.34);
+      background: #dcf8ec;
+      color: #11583e;
+      border: 1px solid #9fe7c8;
     }
     .status-msg.error {
       display: block;
-      background: rgba(203, 180, 86, 0.14);
-      color: #eadca0;
-      border: 1px solid rgba(203, 180, 86, 0.36);
+      background: #ffe7dc;
+      color: #7d3b22;
+      border: 1px solid #f8bea4;
     }
     .status-msg.info {
       display: block;
-      background: rgba(158, 166, 94, 0.14);
-      color: #cbd094;
-      border: 1px solid rgba(158, 166, 94, 0.34);
+      background: #dff2ff;
+      color: #17547d;
+      border: 1px solid #9bd4fa;
     }
     .footer {
       margin-top: 12px;
       font-size: 10px;
-      color: #878370;
+      color: #7b7491;
       text-align: center;
     }
   </style>
@@ -210,7 +220,7 @@
 <body>
   <div class="header">
     <div class="title">
-      <span>🌿 Comment<span class="title-accent">Bot</span></span>
+      <span>✨ Comment<span class="title-accent">Bot</span></span>
     </div>
     <span id="badge-status" class="badge">Checking...</span>
   </div>
@@ -241,7 +251,7 @@
   <div class="field">
     <div style="display:flex; justify-content:space-between; align-items:center;">
       <label for="stream-url" style="margin-bottom:0;">Live Stream URL (Kept until updated)</label>
-      <span id="link-save-badge" class="muted" style="font-size:10px; color:#bfd5a9; display:none;">✓ Saved</span>
+      <span id="link-save-badge" class="muted" style="font-size:10px; color:#11583e; display:none;">✓ Saved</span>
     </div>
     <input type="url" id="stream-url" placeholder="https://www.youtube.com/watch?v=..." style="margin-top:4px;">
     <div style="display:flex; gap:6px; margin-top:6px;">
