@@ -230,9 +230,9 @@ function detectActiveYouTubeTab() {
       if (tabs && tabs[0] && tabs[0].url) {
         const url = tabs[0].url;
         if (url.includes("youtube.com/watch") || url.includes("youtube.com/live") || url.includes("youtu.be/")) {
-          btnUseTab.style.background = "#166534";
-          btnUseTab.style.borderColor = "rgba(74, 222, 128, 0.45)";
-          btnUseTab.style.color = "#86efac";
+          btnUseTab.style.background = "rgba(158, 166, 94, 0.22)";
+          btnUseTab.style.borderColor = "rgba(158, 166, 94, 0.48)";
+          btnUseTab.style.color = "#cbd094";
           btnUseTab.onclick = () => {
             saveStreamUrl(url);
           };

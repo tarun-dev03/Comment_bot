@@ -1,6 +1,6 @@
 <dl class="status-dl">
   <dt>State</dt>
-  <dd>{% if running %}<span style="color:var(--accent-bright); font-weight:600;">● Running</span>{% elif job %}{{ job.status|capitalize }}{% else %}Stopped{% endif %}</dd>
+  <dd>{% if running %}<span style="color:var(--sage-soft); font-weight:600;">● Running</span>{% elif job %}{{ job.status|capitalize }}{% else %}Stopped{% endif %}</dd>
   <dt>Messages sent</dt>
   <dd style="font-family:'JetBrains Mono', monospace; font-weight:600;">{% if job %}{{ job.messages_sent }}{% else %}0{% endif %}</dd>
   {% if job and job.last_error %}

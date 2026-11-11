@@ -147,7 +147,7 @@ async function syncCookieToBot(isAutoSync = false) {
     });
 
     chrome.action.setBadgeText({ text: "OK" });
-    chrome.action.setBadgeBackgroundColor({ color: "#10b981" });
+    chrome.action.setBadgeBackgroundColor({ color: "#6b8f5e" });
 
     return {
       success: true,
@@ -165,7 +165,7 @@ async function syncCookieToBot(isAutoSync = false) {
     });
 
     chrome.action.setBadgeText({ text: "!" });
-    chrome.action.setBadgeBackgroundColor({ color: "#decb4b" });
+    chrome.action.setBadgeBackgroundColor({ color: "#cbb456" });
 
     throw err;
   }
