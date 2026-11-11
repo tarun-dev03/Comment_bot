@@ -2,6 +2,7 @@
 
 const appUrlInput = document.getElementById("app-url");
 const userEmailInput = document.getElementById("user-email");
+const syncTokenInput = document.getElementById("sync-token");
 const streamUrlInput = document.getElementById("stream-url");
 const syncIntervalSelect = document.getElementById("sync-interval");
 const autoSyncCheckbox = document.getElementById("auto-sync");
@@ -41,10 +42,19 @@ function flashLinkBadge(text = "✓ Saved") {
   }, 2500);
 }
 
+function authHeaders(syncToken, extra = {}) {
+  const headers = { Accept: "application/json", ...extra };
+  if (syncToken && syncToken.trim()) {
+    headers["Authorization"] = `Bearer ${syncToken.trim()}`;
+  }
+  return headers;
+}
+
 async function loadSettings() {
   const defaults = {
     appUrl: "http://localhost:8000",
     userEmail: "",
+    syncToken: "",
     streamUrl: "",
     autoSyncEnabled: true,
     syncIntervalMinutes: 15,
@@ -56,6 +66,7 @@ async function loadSettings() {
 
   appUrlInput.value = data.appUrl || "http://localhost:8000";
   userEmailInput.value = data.userEmail || "";
+  if (syncTokenInput) syncTokenInput.value = data.syncToken || "";
   if (streamUrlInput) streamUrlInput.value = data.streamUrl || "";
   syncIntervalSelect.value = String(data.syncIntervalMinutes || 15);
   autoSyncCheckbox.checked = Boolean(data.autoSyncEnabled);
@@ -68,23 +79,53 @@ async function loadSettings() {
     showMessage(data.lastSyncMessage, data.lastSyncStatus === "success" ? "success" : "error");
   }
 
-  // Connect to bot app to verify credentials & sync stream URL
   const base = (data.appUrl || "http://localhost:8000").replace(/\/+$/, "");
+  let token = (data.syncToken || "").trim();
+
+  // If no syncToken stored yet, try discovering it from an active dashboard login
+  if (!token) {
+    try {
+      const tokRes = await fetch(`${base}/api/auth/sync-token`, {
+        credentials: "include",
+        headers: { Accept: "application/json" },
+      });
+      if (tokRes.ok) {
+        const tokData = await tokRes.json();
+        if (tokData.sync_token) {
+          const existingEmail = (userEmailInput.value || "").trim().toLowerCase();
+          if (!existingEmail || (tokData.email && tokData.email.toLowerCase() === existingEmail)) {
+            token = tokData.sync_token;
+            if (syncTokenInput) syncTokenInput.value = token;
+            if (tokData.email && !userEmailInput.value) {
+              userEmailInput.value = tokData.email;
+            }
+            await chrome.storage.local.set({
+              syncToken: token,
+              userEmail: userEmailInput.value.trim(),
+            });
+          }
+        }
+      }
+    } catch (_) {}
+  }
+
+  // Verify bound user via sync token (or session cookie if token missing)
   try {
-    const meRes = await fetch(`${base}/api/me`, {
-      credentials: "include",
-      headers: { Accept: "application/json" },
-    });
+    const fetchOpts = token
+      ? { headers: authHeaders(token) }
+      : { credentials: "include", headers: { Accept: "application/json" } };
+    const meRes = await fetch(`${base}/api/me`, fetchOpts);
     if (meRes.ok) {
       const meData = await meRes.json();
-      const foundEmail = meData.email || meData.suggested_email;
-      if (foundEmail && !userEmailInput.value) {
-        userEmailInput.value = foundEmail;
-        await chrome.storage.local.set({ userEmail: foundEmail });
-      }
-      if (meData.stream_url && (!streamUrlInput.value || streamUrlInput.value === defaults.streamUrl)) {
-        streamUrlInput.value = meData.stream_url;
-        await chrome.storage.local.set({ streamUrl: meData.stream_url });
+      if (meData.authenticated && meData.email) {
+        if (!userEmailInput.value) {
+          userEmailInput.value = meData.email;
+          await chrome.storage.local.set({ userEmail: meData.email });
+        }
+        if (meData.stream_url && (!streamUrlInput.value || streamUrlInput.value === defaults.streamUrl)) {
+          streamUrlInput.value = meData.stream_url;
+          await chrome.storage.local.set({ streamUrl: meData.stream_url });
+        }
       }
     }
   } catch (_) {}
@@ -94,6 +135,7 @@ async function saveSettings() {
   const settings = {
     appUrl: appUrlInput.value.trim(),
     userEmail: userEmailInput.value.trim(),
+    syncToken: syncTokenInput ? syncTokenInput.value.trim() : "",
     streamUrl: streamUrlInput ? streamUrlInput.value.trim() : "",
     autoSyncEnabled: autoSyncCheckbox.checked,
     syncIntervalMinutes: parseInt(syncIntervalSelect.value, 10) || 15,
@@ -109,18 +151,21 @@ async function saveStreamUrl(url) {
   await chrome.storage.local.set({ streamUrl: url });
 
   const appUrl = (appUrlInput.value || "http://localhost:8000").replace(/\/+$/, "");
+  const token = syncTokenInput ? syncTokenInput.value.trim() : "";
   try {
-    const res = await fetch(`${appUrl}/api/settings/stream-url`, {
+    const fetchOpts = {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-      },
-      credentials: "include",
+      headers: authHeaders(token, { "Content-Type": "application/json" }),
       body: JSON.stringify({ stream_url: url }),
-    });
+    };
+    if (!token) {
+      fetchOpts.credentials = "include";
+    }
+    const res = await fetch(`${appUrl}/api/settings/stream-url`, fetchOpts);
     if (res.ok) {
       flashLinkBadge("✓ Kept until updated");
+    } else if (res.status === 401) {
+      flashLinkBadge("Sign in / add Sync Key");
     }
   } catch (err) {
     flashLinkBadge("✓ Saved locally");
@@ -166,8 +211,11 @@ async function handleManualSync() {
     btnSync.textContent = "🔄 Sync YouTube Cookie Now";
 
     if (res && res.ok) {
-      showMessage(`✓ Synced successfully! (${res.data.count} cookies updated)`, "success");
+      showMessage(`✓ Synced for ${res.data.user}! (${res.data.count} cookies updated)`, "success");
       lastSyncTimeEl.textContent = "Just now";
+      if (res.data.user && !userEmailInput.value) {
+        userEmailInput.value = res.data.user;
+      }
     } else {
       const err = (res && res.error) || "Failed to sync. Is Comment Bot running?";
       showMessage(`Sync failed: ${err}`, "error");
@@ -198,6 +246,10 @@ appUrlInput.addEventListener("input", saveSettings);
 appUrlInput.addEventListener("change", saveSettings);
 userEmailInput.addEventListener("input", saveSettings);
 userEmailInput.addEventListener("change", saveSettings);
+if (syncTokenInput) {
+  syncTokenInput.addEventListener("input", saveSettings);
+  syncTokenInput.addEventListener("change", saveSettings);
+}
 syncIntervalSelect.addEventListener("change", saveSettings);
 autoSyncCheckbox.addEventListener("change", saveSettings);
 

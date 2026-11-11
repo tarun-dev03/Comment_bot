@@ -6,6 +6,7 @@ async function getStoredSettings() {
   const defaults = {
     appUrl: "http://localhost:8000",
     userEmail: "",
+    syncToken: "",
     autoSyncEnabled: true,
     syncIntervalMinutes: 15,
   };
@@ -14,22 +15,19 @@ async function getStoredSettings() {
 }
 
 async function extractYouTubeCookieHeader() {
-  const cookieLists = await Promise.all([
-    chrome.cookies.getAll({ domain: "youtube.com" }).catch(() => []),
-    chrome.cookies.getAll({ domain: "google.com" }).catch(() => []),
-    chrome.cookies.getAll({ url: "https://www.youtube.com" }).catch(() => []),
-    chrome.cookies.getAll({ url: "https://accounts.google.com" }).catch(() => []),
-  ]);
+  // Read strictly YouTube cookies so accounts.google.com cookies never overwrite YouTube sessions
+  const primaryCookies = await chrome.cookies.getAll({ url: "https://www.youtube.com" }).catch(() => []);
+  const domainCookies = await chrome.cookies.getAll({ domain: "youtube.com" }).catch(() => []);
 
   const cookieMap = new Map();
-
-  for (const list of cookieLists) {
-    if (Array.isArray(list)) {
-      for (const c of list) {
-        if (c && c.name && c.value) {
-          cookieMap.set(c.name, c.value);
-        }
-      }
+  for (const c of primaryCookies) {
+    if (c && c.name && c.value) {
+      cookieMap.set(c.name, c.value);
+    }
+  }
+  for (const c of domainCookies) {
+    if (c && c.name && c.value && !cookieMap.has(c.name)) {
+      cookieMap.set(c.name, c.value);
     }
   }
 
@@ -66,37 +64,53 @@ async function extractYouTubeCookieHeader() {
   };
 }
 
-async function syncCookieToBot() {
+async function syncCookieToBot(isAutoSync = false) {
   const settings = await getStoredSettings();
-  const endpoint = `${settings.appUrl.replace(/\/+$/, "")}/api/auth/cookie`;
+  const base = (settings.appUrl || "http://localhost:8000").replace(/\/+$/, "");
+  const endpoint = `${base}/api/auth/cookie`;
 
   try {
     const extracted = await extractYouTubeCookieHeader();
-    const payload = {
-      cookie: extracted.cookieString,
-    };
+    let syncToken = (settings.syncToken || "").trim();
+    let emailToSend = (settings.userEmail || "").trim().toLowerCase();
 
-    let emailToSend = (settings.userEmail || "").trim();
-    if (!emailToSend) {
+    // If no syncToken is configured yet, try fetching from currently signed-in dashboard session
+    if (!syncToken) {
       try {
-        const meRes = await fetch(`${settings.appUrl.replace(/\/+$/, "")}/api/me`, {
+        const tokRes = await fetch(`${base}/api/auth/sync-token`, {
           credentials: "include",
           headers: { Accept: "application/json" },
         });
-        if (meRes.ok) {
-          const meData = await meRes.json();
-          if (meData.email) {
-            emailToSend = meData.email;
-          } else if (meData.suggested_email) {
-            emailToSend = meData.suggested_email;
-          }
-          if (emailToSend) {
-            await chrome.storage.local.set({ userEmail: emailToSend });
+        if (tokRes.ok) {
+          const tokData = await tokRes.json();
+          if (tokData.sync_token) {
+            if (emailToSend && tokData.email && tokData.email.toLowerCase() !== emailToSend) {
+              throw new Error(
+                `Account mismatch: extension is set to ${emailToSend}, but dashboard is signed in as ${tokData.email}.`
+              );
+            }
+            syncToken = tokData.sync_token;
+            emailToSend = (tokData.email || emailToSend).toLowerCase();
+            await chrome.storage.local.set({ syncToken, userEmail: emailToSend });
           }
         }
-      } catch (_) {}
+      } catch (err) {
+        if (err && err.message && err.message.startsWith("Account mismatch")) {
+          throw err;
+        }
+      }
     }
 
+    if (!syncToken) {
+      throw new Error(
+        "Missing Extension Sync Key. Sign in to Comment Bot or paste your Sync Key from Dashboard -> Setup Cookie Mode."
+      );
+    }
+
+    const payload = {
+      cookie: extracted.cookieString,
+      auto_sync: Boolean(isAutoSync),
+    };
     if (emailToSend) {
       payload.email = emailToSend;
     }
@@ -106,8 +120,8 @@ async function syncCookieToBot() {
       headers: {
         "Content-Type": "application/json",
         "Accept": "application/json",
+        "Authorization": `Bearer ${syncToken}`,
       },
-      credentials: "include",
       body: JSON.stringify(payload),
     });
 
@@ -127,7 +141,7 @@ async function syncCookieToBot() {
     await chrome.storage.local.set({
       lastSyncTime: now,
       lastSyncStatus: "success",
-      lastSyncMessage: `✓ Synced ${extracted.count} cookies successfully`,
+      lastSyncMessage: `✓ Synced ${extracted.count} cookies for ${activeUser}`,
       lastUser: activeUser,
       userEmail: activeUser,
     });
@@ -178,7 +192,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name === ALARM_NAME) {
     console.log("[Comment Bot] Auto-sync alarm fired. Fetching and syncing cookies...");
     try {
-      await syncCookieToBot();
+      await syncCookieToBot(true);
       console.log("[Comment Bot] Auto-sync complete.");
     } catch (err) {
       console.error("[Comment Bot] Auto-sync failed:", err);
@@ -189,10 +203,10 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
 // Listen to messages from popup
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "manual_sync") {
-    syncCookieToBot()
+    syncCookieToBot(false)
       .then((res) => sendResponse({ ok: true, data: res }))
       .catch((err) => sendResponse({ ok: false, error: err.message }));
-    return true; // async sendResponse
+    return true;
   }
   if (request.action === "update_schedule") {
     updateSyncSchedule()

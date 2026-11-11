@@ -18,6 +18,8 @@ class User(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     email: Mapped[str] = mapped_column(String(320), unique=True, index=True, nullable=False)
+    sync_token_hash: Mapped[str | None] = mapped_column(String(64), unique=True, index=True, nullable=True)
+    sync_token_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     oauth_token: Mapped["OAuthToken | None"] = relationship(back_populates="user", uselist=False)

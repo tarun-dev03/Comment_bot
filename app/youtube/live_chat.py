@@ -204,25 +204,56 @@ def _check_chat_restrictions(data: any) -> str | None:
 
 _innertube_cache: dict[str, dict] = {}
 
+_IDENTITY_COOKIE_NAMES = (
+    "SAPISID",
+    "__Secure-3PAPISID",
+    "__Secure-1PAPISID",
+    "APISID",
+    "SID",
+    "__Secure-1PSID",
+    "__Secure-3PSID",
+    "HSID",
+    "SSID",
+    "LOGIN_INFO",
+    "authuser",
+)
 
-def invalidate_innertube_cache(video_id: str | None = None) -> None:
-    """Invalidate cached InnerTube session parameters."""
-    if video_id:
-        keys_to_remove = [k for k in _innertube_cache if k.startswith(f"{video_id}_")]
-        for k in keys_to_remove:
-            _innertube_cache.pop(k, None)
+
+def _cookie_identity_fingerprint(cookie_string: str) -> str:
+    import hashlib
+
+    parts = [f"{name}={_extract_cookie_val(cookie_string, name) or ''}" for name in _IDENTITY_COOKIE_NAMES]
+    raw = "|".join(parts)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+
+
+def invalidate_innertube_cache(video_id: str | None = None, user_id: int | None = None) -> None:
+    """Invalidate cached InnerTube session parameters safely scoped by user_id and/or video_id."""
+    if user_id is not None and video_id:
+        prefix = f"u{user_id}:{video_id}:"
+        keys_to_remove = [k for k in _innertube_cache if k.startswith(prefix)]
+    elif user_id is not None:
+        prefix = f"u{user_id}:"
+        keys_to_remove = [k for k in _innertube_cache if k.startswith(prefix)]
+    elif video_id:
+        needle = f":{video_id}:"
+        keys_to_remove = [k for k in _innertube_cache if needle in k]
     else:
         _innertube_cache.clear()
+        return
+
+    for k in keys_to_remove:
+        _innertube_cache.pop(k, None)
 
 
 async def send_innertube_live_chat_message(
-    cookie_string: str, video_id: str, message: str
+    cookie_string: str, video_id: str, message: str, user_id: int | None = None
 ) -> str:
-    import hashlib
     import json
     import time
     import urllib.parse
     import uuid
+    import hashlib
 
     cookie_string = " ".join(cookie_string.splitlines()).strip()
     if not cookie_string:
@@ -260,8 +291,9 @@ async def send_innertube_live_chat_message(
         "(KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36"
     )
 
-    sapisid_hash = hashlib.sha256(sapisid.encode("utf-8")).hexdigest()[:12]
-    cache_key = f"{video_id}_{sapisid_hash}"
+    identity_hash = _cookie_identity_fingerprint(cookie_string)
+    user_scope = f"u{user_id}" if user_id is not None else "anon"
+    cache_key = f"{user_scope}:{video_id}:{identity_hash}"
 
     async def _fetch_session_params(client: httpx.AsyncClient) -> dict:
         url = f"https://www.youtube.com/live_chat?v={video_id}"
@@ -489,7 +521,7 @@ async def send_innertube_live_chat_message(
                         400,
                     )
 
-            updated_cookies = dict(client.cookies)
+            updated_cookies = {c.name: c.value for c in client.cookies.jar if c.name and c.value is not None}
             return _merge_cookies(cookie_string, updated_cookies)
     except httpx.RequestError as exc:
         raise YouTubeAPIError(f"Network error sending InnerTube message: {exc}", 503) from exc

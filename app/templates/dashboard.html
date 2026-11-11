@@ -28,6 +28,26 @@
 </section>
 {% else %}
 
+{% if auth_error_msg %}
+<div class="card" style="background: rgba(239, 68, 68, 0.14); border: 1px solid rgba(239, 68, 68, 0.4); color: #fecaca; padding: 1rem 1.25rem; margin-bottom: 1.25rem;">
+  <strong>⚠️ Account Protection Notice:</strong> {{ auth_error_msg }}
+</div>
+{% endif %}
+
+<!-- Active Account Banner -->
+<div class="card" style="padding: 0.85rem 1.15rem; margin-bottom: 1rem; display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; border-left: 4px solid #10b981;">
+  <div style="font-size: 0.84rem; color: var(--text-muted);">
+    <span style="color: #34d399; font-weight: 700;">🔒 Isolated Session Active:</span>
+    <strong style="color: var(--text-main);">{{ user.email }}</strong>
+    {% if oauth and oauth.google_email and oauth.google_email != user.email %}
+      <span class="muted"> • Linked YouTube: <strong>{{ oauth.google_email }}</strong></span>
+    {% endif %}
+  </div>
+  <a href="/auth/google/login" class="btn btn-ghost btn-sm" title="Sign in as a different Google account without affecting this account's running bot">
+    🔄 Switch Google Account
+  </a>
+</div>
+
 <!-- Live Stats Overview -->
 <div class="stats-grid">
   <div class="stat-box">
@@ -247,9 +267,16 @@
         Link your Google account once for seamless API commenting from mobile.
         {% endif %}
       </p>
-      <a class="btn btn-ghost btn-sm" href="/auth/google/start" style="width:100%;">
-        {% if oauth %}🔄 Reconnect Google Account{% else %}🔑 Connect Google Account{% endif %}
-      </a>
+      <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+        <a class="btn btn-ghost btn-sm" href="/auth/google/start" style="flex:1;">
+          {% if oauth %}🔄 Reconnect Google{% else %}🔑 Connect Google{% endif %}
+        </a>
+        {% if oauth %}
+        <a class="btn btn-ghost btn-sm" href="/auth/google/login" title="Switch to another Google account">
+          ⇄ Switch
+        </a>
+        {% endif %}
+      </div>
     </div>
 
     <!-- YouTube Web Cookie -->
@@ -266,13 +293,13 @@
       </div>
       <p class="muted" style="font-size:0.8rem; margin-bottom:0.85rem;">
         {% if has_cookie %}
-        Active and saved. Enables 100% quota-free comments around the clock.
+        Active and saved for <strong>{{ user.email }}</strong>. Enables quota-free comments around the clock.
         {% else %}
         Auto-sync via the included Chrome extension for unlimited comments.
         {% endif %}
       </p>
       <button type="button" class="btn btn-ghost btn-sm" onclick="toggleCookieDetails()" style="width:100%;">
-        {% if has_cookie %}⚙️ Manage Cookie / Auto-Sync{% else %}➕ Setup Cookie Mode{% endif %}
+        {% if has_cookie %}⚙️ Manage Cookie / Sync Key{% else %}➕ Setup Cookie Mode{% endif %}
       </button>
     </div>
   </div>
@@ -280,11 +307,17 @@
   <!-- Collapsible Cookie Management Box -->
   <div id="cookie-manager-box" style="display:none; margin-top:1.25rem; padding-top:1rem; border-top:1px solid rgba(255,255,255,0.08);">
     <div style="background:rgba(59,130,246,0.1); border:1px solid rgba(59,130,246,0.25); border-radius:var(--radius-sm); padding:0.75rem 1rem; margin-bottom:1rem; font-size:0.82rem; color:#93c5fd; line-height:1.45;">
-      <strong>🤖 Chrome Extension Auto-Sync:</strong> Load the extension from the <code>extension/</code> folder in Chrome/Edge on your PC. It automatically refreshes and syncs your cookies every 15 minutes!
+      <strong>🔐 Personal Extension Sync Key (Required for Multi-User Security):</strong> Paste this key into your Chrome extension so it syncs cookies strictly to <strong>{{ user.email }}</strong> and never mixes with other users.
+      <div style="display:flex; gap:0.5rem; margin-top:0.6rem; align-items:center; flex-wrap:wrap;">
+        <input id="extension-sync-token" type="text" readonly value="{{ sync_token or '' }}" style="flex:1; min-width:200px; font-family:'JetBrains Mono', monospace; font-size:0.78rem; padding:0.45rem 0.65rem;">
+        <button type="button" class="btn btn-ghost btn-sm" onclick="copySyncToken()">📋 Copy Key</button>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="rotateSyncToken()">🔄 Regenerate</button>
+      </div>
     </div>
     <form method="post" action="/api/auth/cookie" class="stack">
+      <input type="hidden" name="expected_user_id" value="{{ user.id }}">
       <label for="cookie" class="field-label">Manual Cookie Header Paste</label>
-      <textarea id="cookie" name="cookie" rows="3" placeholder="{% if has_cookie %}●●●●●●●● (YouTube cookie is saved and active. Paste here only to manually replace){% else %}e.g. VISITOR_INFO1_LIVE=...; SID=...; HSID=...; SSID=...; SAPISID=...; LOGIN_INFO=...{% endif %}" required></textarea>
+      <textarea id="cookie" name="cookie" rows="3" placeholder="{% if has_cookie %}●●●●●●●● (YouTube cookie is saved and active for {{ user.email }}. Paste here only to manually replace){% else %}e.g. VISITOR_INFO1_LIVE=...; SID=...; HSID=...; SSID=...; SAPISID=...; LOGIN_INFO=...{% endif %}" required></textarea>
       <button type="submit" class="btn btn-ghost btn-sm" style="align-self:flex-start;">
         {% if has_cookie %}Update YouTube Cookie{% else %}Save YouTube Cookie{% endif %}
       </button>
@@ -303,7 +336,7 @@
         <span>Comment Phrases Pool</span>
       </h2>
       <p class="card-subtitle" style="margin: 0.25rem 0 0;">
-        Phrases are added to the built-in pool. The bot guarantees intelligent variation and never repeats recent comments.
+        Includes the built-in <strong>Conversation Chat Database</strong> ("How are you?" &rarr; Check-in &rarr; Topic Openers &rarr; Building a Conversation: {{ conversation_stats.total_stage_phrases }} phrases &amp; {{ conversation_stats.conversation_arcs }} arcs) plus your custom phrases.
       </p>
     </div>
     <span class="user-pill" style="font-family:'JetBrains Mono', monospace; font-size:0.75rem;">
@@ -341,6 +374,22 @@
 
 <!-- Client JavaScript Logic -->
 <script>
+const CURRENT_USER_ID = {{ user.id }};
+const CURRENT_USER_EMAIL = {{ user.email | tojson }};
+const STORAGE_PREFIX = `commentbot_u${CURRENT_USER_ID}_`;
+
+function apiHeaders(extra = {}) {
+  return { 'X-User-Id': String(CURRENT_USER_ID), ...extra };
+}
+
+function handleSessionGuard(res) {
+  if (res && (res.status === 401 || res.status === 409)) {
+    window.location.reload();
+    return true;
+  }
+  return false;
+}
+
 // Elements
 const statusEl = document.getElementById('bot-status');
 const streamUrlEl = document.getElementById('stream_url');
@@ -441,15 +490,16 @@ function updateVideoPreview(url) {
 async function persistStreamUrl(url) {
   url = (url || '').trim();
   if (!url) return;
-  try { localStorage.setItem('commentbot_stream_url', url); } catch (_) {}
+  try { localStorage.setItem(STORAGE_PREFIX + 'stream_url', url); } catch (_) {}
   updateVideoPreview(url);
 
   try {
     const res = await fetch('/api/settings/stream-url', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: apiHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ stream_url: url })
     });
+    if (handleSessionGuard(res)) return;
     if (res.ok) {
       showSavedNotice();
     }
@@ -463,15 +513,16 @@ async function persistRunnerSettings() {
   const mode = modeInput ? modeInput.value : 'oauth';
   const interval = intervalInput ? parseInt(intervalInput.value, 10) : 30;
   try {
-    localStorage.setItem('commentbot_mode', mode);
-    localStorage.setItem('commentbot_interval', String(interval));
+    localStorage.setItem(STORAGE_PREFIX + 'mode', mode);
+    localStorage.setItem(STORAGE_PREFIX + 'interval', String(interval));
   } catch (_) {}
   try {
-    await fetch('/api/settings/runner', {
+    const res = await fetch('/api/settings/runner', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: apiHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ mode: mode, interval_seconds: interval })
     });
+    handleSessionGuard(res);
   } catch (_) {}
 }
 
@@ -505,7 +556,7 @@ document.querySelectorAll('.preset-chip').forEach(chip => {
 let debounceTimer = null;
 streamUrlEl.addEventListener('input', (e) => {
   const val = e.target.value.trim();
-  try { localStorage.setItem('commentbot_stream_url', val); } catch (_) {}
+  try { localStorage.setItem(STORAGE_PREFIX + 'stream_url', val); } catch (_) {}
   updateVideoPreview(val);
   clearTimeout(debounceTimer);
   debounceTimer = setTimeout(() => persistStreamUrl(val), 400);
@@ -539,6 +590,37 @@ function toggleCookieDetails() {
   box.style.display = (box.style.display === 'none' || !box.style.display) ? 'block' : 'none';
 }
 
+async function copySyncToken() {
+  const el = document.getElementById('extension-sync-token');
+  if (!el || !el.value) return;
+  try {
+    await navigator.clipboard.writeText(el.value);
+    showToast('✓ Personal Sync Key copied! Paste it into the Chrome extension.');
+  } catch (_) {
+    el.select();
+    document.execCommand('copy');
+    showToast('✓ Sync Key copied!');
+  }
+}
+
+async function rotateSyncToken() {
+  try {
+    const res = await fetch('/api/auth/sync-token/rotate', {
+      method: 'POST',
+      headers: apiHeaders()
+    });
+    if (handleSessionGuard(res)) return;
+    const data = await res.json();
+    if (res.ok && data.sync_token) {
+      const el = document.getElementById('extension-sync-token');
+      if (el) el.value = data.sync_token;
+      showToast('🔄 New Extension Sync Key generated (old key revoked)');
+    }
+  } catch (_) {
+    showToast('Could not regenerate sync key', 'error');
+  }
+}
+
 // Phrase Management
 async function handleAddPhrase(e) {
   e.preventDefault();
@@ -549,9 +631,10 @@ async function handleAddPhrase(e) {
   try {
     const res = await fetch('/api/phrases/json', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: apiHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ phrase: phrase })
     });
+    if (handleSessionGuard(res)) return;
     const data = await res.json();
     if (res.ok && data.ok) {
       input.value = '';
@@ -563,7 +646,17 @@ async function handleAddPhrase(e) {
       tag.className = 'phrase-tag';
       tag.dataset.id = data.id;
       tag.dataset.text = data.phrase;
-      tag.innerHTML = `<span>${escapeHtml(data.phrase)}</span><span class="phrase-tag-remove" onclick="handleDeletePhrase(${data.id}, '${escapeHtml(data.phrase)}', this)" title="Remove phrase">×</span>`;
+
+      const textSpan = document.createElement('span');
+      textSpan.textContent = data.phrase;
+      const removeSpan = document.createElement('span');
+      removeSpan.className = 'phrase-tag-remove';
+      removeSpan.title = 'Remove phrase';
+      removeSpan.textContent = '×';
+      removeSpan.addEventListener('click', () => handleDeletePhrase(data.id, data.phrase, removeSpan));
+
+      tag.appendChild(textSpan);
+      tag.appendChild(removeSpan);
       container.prepend(tag);
 
       const countEl = document.getElementById('phrase-count');
@@ -581,9 +674,10 @@ async function handleDeletePhrase(id, text, el) {
   try {
     const res = await fetch('/api/phrases/delete', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: apiHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ phrase_id: id, phrase: text })
     });
+    if (handleSessionGuard(res)) return;
     if (res.ok) {
       const parent = el.closest('.phrase-tag');
       if (parent) {
@@ -601,7 +695,8 @@ async function handleDeletePhrase(id, text, el) {
 btnTestComment.addEventListener('click', async () => {
   btnTestComment.disabled = true;
   try {
-    const r = await fetch('/api/bot/preview-sample');
+    const r = await fetch('/api/bot/preview-sample', { headers: apiHeaders() });
+    if (handleSessionGuard(r)) return;
     const data = await r.json();
     if (data.ok && data.message) {
       showToast(`Sample comment: "${data.message}"`, 'info');
@@ -632,9 +727,10 @@ btnStart.addEventListener('click', async () => {
   try {
     const r = await fetch('/api/bots/start', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: apiHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ stream_url: url, interval_seconds: interval, mode: mode })
     });
+    if (handleSessionGuard(r)) return;
     const data = await r.json().catch(() => ({}));
     if (!r.ok) {
       showToast(data.detail || 'Failed to start bot', 'error');
@@ -653,7 +749,8 @@ btnStart.addEventListener('click', async () => {
 btnStop.addEventListener('click', async () => {
   btnStop.disabled = true;
   try {
-    await fetch('/api/bots/stop', { method: 'POST' });
+    const r = await fetch('/api/bots/stop', { method: 'POST', headers: apiHeaders() });
+    if (handleSessionGuard(r)) return;
     showToast('Bot stopped');
     refreshStatus();
   } catch (_) {}
@@ -677,9 +774,14 @@ function updateElapsedDisplay() {
 // Real-Time Status Poller
 async function refreshStatus() {
   try {
-    const r = await fetch('/api/bots/status');
+    const r = await fetch('/api/bots/status', { headers: apiHeaders() });
+    if (handleSessionGuard(r)) return;
     if (!r.ok) return;
     const data = await r.json();
+    if (data.user_id && data.user_id !== CURRENT_USER_ID) {
+      window.location.reload();
+      return;
+    }
 
     const isRunning = Boolean(data.running);
     if (isRunning) {
@@ -745,7 +847,12 @@ function escapeHtml(s) {
 // Initial Setup on load
 document.addEventListener('DOMContentLoaded', () => {
   try {
-    const cachedUrl = localStorage.getItem('commentbot_stream_url');
+    // Clean up legacy unscoped keys so old shared cache never leaks into another user
+    localStorage.removeItem('commentbot_stream_url');
+    localStorage.removeItem('commentbot_mode');
+    localStorage.removeItem('commentbot_interval');
+
+    const cachedUrl = localStorage.getItem(STORAGE_PREFIX + 'stream_url');
     if (cachedUrl && !streamUrlEl.value) {
       streamUrlEl.value = cachedUrl;
       persistStreamUrl(cachedUrl);

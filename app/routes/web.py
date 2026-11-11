@@ -1,11 +1,12 @@
 import secrets
 from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, EmailStr
-from sqlalchemy import select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.email_login import request_email_login, verify_email_login
@@ -13,30 +14,43 @@ from app.auth.google_oauth import (
     build_google_authorize_url,
     exchange_code_for_tokens,
     fetch_google_email,
+    get_access_token_for_user,
+    get_user_refresh_token,
     save_oauth_token,
 )
 from app.auth.oauth_state import create_oauth_state, pop_oauth_state
-from app.bot.engine import is_bot_running, start_bot_task, stop_bot_task
+from app.bot.engine import _load_custom_phrases, is_bot_running, record_public_url, start_bot_task, stop_bot_task
+from app.bot.messages import MessageGenerator, get_conversation_db_stats
 from app.config import get_settings
-from app.deps import SESSION_COOKIE, get_current_user, get_current_user_optional
 from app.db import async_session_factory, get_db
+from app.deps import (
+    SESSION_COOKIE,
+    ensure_user_sync_token,
+    get_current_user,
+    get_current_user_optional,
+    resolve_api_user_optional,
+)
 from app.models import BotJob, BotJobStatus, OAuthToken, User, UserCookie, UserPhrase
-from app.security import apply_session_cookie
-from app.youtube.live_chat import YouTubeAPIError, fetch_live_chat_id, parse_video_id
+from app.security import apply_session_cookie, encrypt_text
+from app.youtube.live_chat import (
+    YouTubeAPIError,
+    fetch_live_chat_id,
+    invalidate_innertube_cache,
+    parse_video_id,
+)
 
 router = APIRouter()
 templates = Jinja2Templates(directory=str(Path(__file__).resolve().parents[1] / "templates"))
 
 
 def _public_base_url(request: Request) -> str:
-    """Use the URL the user actually opened (fixes wrong APP_URL → Google 404)."""
+    """Use the URL the user actually opened (fixes wrong APP_URL -> Google 404)."""
     forwarded = request.headers.get("x-forwarded-proto")
     host = request.headers.get("x-forwarded-host") or request.headers.get("host")
     if forwarded and host:
         url = f"{forwarded}://{host}".rstrip("/")
     else:
         url = str(request.base_url).rstrip("/")
-    from app.bot.engine import record_public_url
     record_public_url(url)
     return url
 
@@ -50,18 +64,22 @@ async def _begin_google_oauth(
     request: Request,
     db: AsyncSession,
     user_id: int | None,
+    login_hint: str | None = None,
 ) -> RedirectResponse:
     if not _google_oauth_configured():
         raise HTTPException(status_code=503, detail="Google OAuth is not configured")
     state = secrets.token_urlsafe(16)
     redirect_uri = f"{_public_base_url(request)}/auth/google/callback"
     await create_oauth_state(db, state=state, redirect_uri=redirect_uri, user_id=user_id)
-    return RedirectResponse(build_google_authorize_url(state, redirect_uri), status_code=303)
+    return RedirectResponse(
+        build_google_authorize_url(state, redirect_uri, login_hint=login_hint),
+        status_code=303,
+    )
 
 
 async def _user_for_google_login(db: AsyncSession, google_email: str) -> User:
     email = google_email.strip().lower()
-    result = await db.execute(select(User).where(User.email == email))
+    result = await db.execute(select(User).where(func.lower(User.email) == email))
     user = result.scalar_one_or_none()
     if not user:
         user = User(email=email)
@@ -80,33 +98,34 @@ async def health(request: Request):
 async def api_me(
     request: Request,
     response: Response,
-    user: User | None = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db),
 ):
     _public_base_url(request)
+    user, auth_source = await resolve_api_user_optional(request, db)
     if user:
-        apply_session_cookie(response, user.id, request=request)
+        if auth_source == "session":
+            apply_session_cookie(response, user.id, request=request)
         j_res = await db.execute(select(BotJob).where(BotJob.user_id == user.id))
         job = j_res.scalar_one_or_none()
         c_res = await db.execute(select(UserCookie).where(UserCookie.user_id == user.id))
         has_cookie = c_res.scalar_one_or_none() is not None
         o_res = await db.execute(select(OAuthToken).where(OAuthToken.user_id == user.id))
-        has_oauth = o_res.scalar_one_or_none() is not None
+        oauth = o_res.scalar_one_or_none()
         return {
             "authenticated": True,
             "email": user.email,
+            "google_email": oauth.google_email if oauth else None,
             "user_id": user.id,
             "stream_url": job.stream_url if job else "",
             "mode": job.mode if job else ("cookie" if has_cookie else "oauth"),
             "interval_seconds": job.interval_seconds if job else 30,
             "has_cookie": has_cookie,
-            "has_oauth": has_oauth,
+            "has_oauth": oauth is not None,
         }
-    u_res = await db.execute(select(User).order_by(User.id.desc()))
-    last_user = u_res.scalars().first()
     return {
         "authenticated": False,
-        "suggested_email": last_user.email if last_user else None,
+        "email": None,
+        "user_id": None,
         "stream_url": "",
     }
 
@@ -149,8 +168,14 @@ async def home(
     job = None
     phrases: list[str] = []
     phrase_items: list[dict] = []
-    async with async_session_factory() as db:
-        if user:
+    sync_token = ""
+    if user:
+        async with async_session_factory() as db:
+            # Reload user within this session so sync_token updates persist cleanly
+            u_res = await db.execute(select(User).where(User.id == user.id))
+            db_user = u_res.scalar_one_or_none() or user
+            sync_token = await ensure_user_sync_token(db, db_user)
+
             result = await db.execute(select(OAuthToken).where(OAuthToken.user_id == user.id))
             oauth = result.scalar_one_or_none()
             c_res = await db.execute(select(UserCookie).where(UserCookie.user_id == user.id))
@@ -166,6 +191,22 @@ async def home(
             phrase_items = [{"id": p.id, "phrase": p.phrase} for p in phrase_rows]
             phrases = [p["phrase"] for p in phrase_items]
 
+    auth_error = request.query_params.get("auth_error")
+    auth_error_msg = None
+    if auth_error == "account_mismatch":
+        expected = request.query_params.get("expected", "")
+        got = request.query_params.get("got", "")
+        auth_error_msg = (
+            f"Account mismatch blocked: you are signed in as {expected}, "
+            f"but authorized {got}. Sign out or switch accounts to use {got}."
+        )
+    elif auth_error == "account_in_use":
+        got = request.query_params.get("got", "")
+        auth_error_msg = (
+            f"Cannot link {got} to this session because {got} already belongs to another user account. "
+            "Sign out and continue with Google as that account instead."
+        )
+
     response = templates.TemplateResponse(
         request,
         "dashboard.html",
@@ -176,8 +217,11 @@ async def home(
             "job": job,
             "phrases": phrases,
             "phrase_items": phrase_items,
+            "sync_token": sync_token,
             "running": bool(user and is_bot_running(user.id)),
             "settings": get_settings(),
+            "auth_error_msg": auth_error_msg,
+            "conversation_stats": get_conversation_db_stats(),
         },
     )
     if user:
@@ -240,7 +284,7 @@ async def logout():
 
 @router.get("/auth/google/login")
 async def google_login_start(request: Request, db: AsyncSession = Depends(get_db)):
-    """One-step sign-in: Google account + YouTube scope (no email magic link)."""
+    """One-step sign-in / switch account: Google account + YouTube scope."""
     return await _begin_google_oauth(request, db, None)
 
 
@@ -250,8 +294,15 @@ async def google_start(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Reconnect or grant YouTube access for an existing session."""
-    return await _begin_google_oauth(request, db, user.id)
+    """Reconnect or grant YouTube access for the currently signed-in account."""
+    res = await db.execute(select(OAuthToken).where(OAuthToken.user_id == user.id))
+    oauth = res.scalar_one_or_none()
+    hint = None
+    if oauth and oauth.google_email:
+        hint = oauth.google_email
+    elif user.email and not user.email.endswith(".local"):
+        hint = user.email
+    return await _begin_google_oauth(request, db, user.id, login_hint=hint)
 
 
 @router.get("/auth/google/callback")
@@ -263,16 +314,13 @@ async def google_callback(
     db: AsyncSession = Depends(get_db),
 ):
     if error:
-        return RedirectResponse(f"/login?error={error}", status_code=303)
+        return RedirectResponse(f"/login?error={quote(error)}", status_code=303)
     if not code or not state:
         return RedirectResponse("/login?error=missing_code", status_code=303)
 
     pending = await pop_oauth_state(db, state)
     if not pending:
-        return RedirectResponse(
-            "/login?error=invalid_state",
-            status_code=303,
-        )
+        return RedirectResponse("/login?error=invalid_state", status_code=303)
 
     linked_user_id = pending.user_id
     redirect_uri = pending.redirect_uri
@@ -284,17 +332,20 @@ async def google_callback(
 
     refresh = token_data.get("refresh_token")
     access = token_data.get("access_token")
-    if not refresh:
-        return RedirectResponse("/login?error=no_refresh_token", status_code=303)
 
     google_email = None
     if access:
         google_email = await fetch_google_email(access)
 
+    if not google_email:
+        return RedirectResponse("/login?error=no_google_email", status_code=303)
+
+    google_email_norm = google_email.strip().lower()
+
     if linked_user_id is None:
-        if not google_email:
-            return RedirectResponse("/login?error=no_google_email", status_code=303)
-        user = await _user_for_google_login(db, google_email)
+        if not refresh:
+            return RedirectResponse("/login?error=no_refresh_token", status_code=303)
+        user = await _user_for_google_login(db, google_email_norm)
         user_id = user.id
     else:
         user_id = linked_user_id
@@ -303,13 +354,89 @@ async def google_callback(
         if not user:
             return RedirectResponse("/login?error=session_expired", status_code=303)
 
-    await save_oauth_token(db, user_id, refresh, google_email)
+        # Prevent silent account mismatch or overwriting another user's Google account
+        existing_res = await db.execute(select(OAuthToken).where(OAuthToken.user_id == user_id))
+        existing_oauth = existing_res.scalar_one_or_none()
 
-    home = f"{_public_base_url(request)}/"
-    response = RedirectResponse(home, status_code=303)
-    # Always refresh and ensure session cookie is attached to keep user signed in!
+        if existing_oauth and existing_oauth.google_email:
+            expected_email = existing_oauth.google_email.strip().lower()
+            if expected_email != google_email_norm:
+                return RedirectResponse(
+                    f"/?auth_error=account_mismatch&expected={quote(expected_email)}&got={quote(google_email_norm)}",
+                    status_code=303,
+                )
+
+        user_email_norm = user.email.strip().lower()
+        if user_email_norm.endswith(("@gmail.com", "@googlemail.com")) and user_email_norm != google_email_norm:
+            return RedirectResponse(
+                f"/?auth_error=account_mismatch&expected={quote(user_email_norm)}&got={quote(google_email_norm)}",
+                status_code=303,
+            )
+
+        other_user_res = await db.execute(
+            select(User).where(func.lower(User.email) == google_email_norm, User.id != user_id)
+        )
+        if other_user_res.scalar_one_or_none():
+            return RedirectResponse(
+                f"/?auth_error=account_in_use&got={quote(google_email_norm)}",
+                status_code=303,
+            )
+
+        other_oauth_res = await db.execute(
+            select(OAuthToken).where(
+                func.lower(OAuthToken.google_email) == google_email_norm,
+                OAuthToken.user_id != user_id,
+            )
+        )
+        if other_oauth_res.scalar_one_or_none():
+            return RedirectResponse(
+                f"/?auth_error=account_in_use&got={quote(google_email_norm)}",
+                status_code=303,
+            )
+
+        if not refresh:
+            refresh = await get_user_refresh_token(db, user_id)
+            if not refresh:
+                return RedirectResponse("/login?error=no_refresh_token", status_code=303)
+
+    await save_oauth_token(db, user_id, refresh, google_email_norm)
+
+    home_url = f"{_public_base_url(request)}/"
+    response = RedirectResponse(home_url, status_code=303)
     apply_session_cookie(response, user_id, request=request)
     return response
+
+
+@router.get("/api/auth/sync-token")
+async def get_sync_token(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    u_res = await db.execute(select(User).where(User.id == user.id))
+    db_user = u_res.scalar_one_or_none() or user
+    token = await ensure_user_sync_token(db, db_user)
+    return {
+        "ok": True,
+        "sync_token": token,
+        "user_id": db_user.id,
+        "email": db_user.email,
+    }
+
+
+@router.post("/api/auth/sync-token/rotate")
+async def rotate_sync_token(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    u_res = await db.execute(select(User).where(User.id == user.id))
+    db_user = u_res.scalar_one_or_none() or user
+    token = await ensure_user_sync_token(db, db_user, regenerate=True)
+    return {
+        "ok": True,
+        "sync_token": token,
+        "user_id": db_user.id,
+        "email": db_user.email,
+    }
 
 
 @router.post("/api/auth/cookie")
@@ -317,53 +444,64 @@ async def save_cookie(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ):
-    from app.models import BotJob, BotJobStatus, User, UserCookie
-    from app.security import encrypt_text
-    from app.youtube.live_chat import invalidate_innertube_cache
-
     cookie_val = None
     is_json = False
-    data = {}
+    data: dict = {}
+    expected_user_id_raw = None
+    body_sync_token = None
+    auto_sync = False
+
     content_type = request.headers.get("content-type", "")
     if "application/json" in content_type:
         is_json = True
         try:
             data = await request.json()
             cookie_val = data.get("cookie", "")
-        except Exception:
-            raise HTTPException(status_code=400, detail="Invalid JSON payload")
+            expected_user_id_raw = data.get("expected_user_id")
+            body_sync_token = data.get("sync_token")
+            auto_sync = bool(data.get("auto_sync", False))
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail="Invalid JSON payload") from exc
     else:
         form = await request.form()
         cookie_val = form.get("cookie", "")
+        expected_user_id_raw = form.get("expected_user_id")
 
-    user = await get_current_user_optional(request)
+    user, auth_source = await resolve_api_user_optional(request, db, body_token=body_sync_token)
     if not user:
-        if is_json and data.get("email"):
-            email_clean = data["email"].strip().lower()
-            u_res = await db.execute(select(User).where(User.email == email_clean))
-            user = u_res.scalar_one_or_none()
-            if not user:
-                user = User(email=email_clean)
-                db.add(user)
-                await db.flush()
-        else:
-            # Check for user associated with an existing BotJob or latest user
-            job_res = await db.execute(select(BotJob).order_by(BotJob.updated_at.desc()))
-            recent_job = job_res.scalars().first()
-            if recent_job:
-                u_res = await db.execute(select(User).where(User.id == recent_job.user_id))
-                user = u_res.scalar_one_or_none()
+        raise HTTPException(
+            status_code=401,
+            detail="Not signed in. Sign in to Comment Bot or configure your Extension Sync Key.",
+        )
 
-            if not user:
-                u_res = await db.execute(select(User).order_by(User.id.desc()))
-                user = u_res.scalars().first()
+    if expected_user_id_raw is not None and str(expected_user_id_raw).strip() != "":
+        try:
+            expected_id = int(str(expected_user_id_raw).strip())
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="Invalid expected_user_id") from exc
+        if expected_id != user.id:
+            raise HTTPException(
+                status_code=409,
+                detail="Account mismatch: browser session switched to another user. Please refresh the page.",
+            )
 
-            if not user:
-                user = User(email="user@commentbot.local")
-                db.add(user)
-                await db.flush()
+    requested_email = (data.get("email") or "").strip().lower() if is_json else ""
+    if requested_email:
+        o_res = await db.execute(select(OAuthToken).where(OAuthToken.user_id == user.id))
+        oauth = o_res.scalar_one_or_none()
+        allowed_emails = {user.email.strip().lower()}
+        if oauth and oauth.google_email:
+            allowed_emails.add(oauth.google_email.strip().lower())
+        if requested_email not in allowed_emails:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"Account mismatch: requested {requested_email}, "
+                    f"but authenticated account is {user.email}."
+                ),
+            )
 
-    text_val = (cookie_val or "").strip()
+    text_val = (str(cookie_val) if cookie_val is not None else "").strip()
     if not text_val:
         raise HTTPException(status_code=400, detail="Cookie string cannot be empty")
 
@@ -375,26 +513,39 @@ async def save_cookie(
     else:
         db.add(UserCookie(user_id=user.id, cookie_encrypted=encrypted))
 
-    # Invalidate cached session so new cookie takes effect immediately
-    invalidate_innertube_cache()
+    # Invalidate ONLY this user's cached InnerTube sessions
+    invalidate_innertube_cache(user_id=user.id)
 
     res_job = await db.execute(select(BotJob).where(BotJob.user_id == user.id))
     job = res_job.scalar_one_or_none()
     if job:
-        job.mode = "cookie"
-        job.last_error = None
-        if job.status == BotJobStatus.ERROR.value:
-            job.status = BotJobStatus.STOPPED.value
+        # Never hijack an actively running OAuth bot into cookie mode during background auto-sync
+        if not (auto_sync and job.status == BotJobStatus.RUNNING.value and job.mode == "oauth"):
+            if not auto_sync:
+                job.mode = "cookie"
+        if job.mode == "cookie":
+            job.last_error = None
+            if job.status == BotJobStatus.ERROR.value:
+                job.status = BotJobStatus.STOPPED.value
     await db.commit()
 
     if is_json or "application/json" in request.headers.get("accept", ""):
-        from fastapi.responses import JSONResponse
-        res = JSONResponse({"ok": True, "message": "YouTube Cookie updated successfully", "user": user.email})
-        apply_session_cookie(res, user.id, request=request)
-        return res
-    res = RedirectResponse("/", status_code=303)
-    apply_session_cookie(res, user.id, request=request)
-    return res
+        res_json = JSONResponse(
+            {
+                "ok": True,
+                "message": "YouTube Cookie updated successfully",
+                "user": user.email,
+                "user_id": user.id,
+            }
+        )
+        if auth_source == "session":
+            apply_session_cookie(res_json, user.id, request=request)
+        return res_json
+
+    res_redir = RedirectResponse("/", status_code=303)
+    if auth_source == "session":
+        apply_session_cookie(res_redir, user.id, request=request)
+    return res_redir
 
 
 class StreamUrlBody(BaseModel):
@@ -403,13 +554,17 @@ class StreamUrlBody(BaseModel):
 
 @router.get("/api/settings/stream-url")
 async def get_stream_url_setting(
-    user: User = Depends(get_current_user),
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ):
+    user, _ = await resolve_api_user_optional(request, db)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not signed in")
     result = await db.execute(select(BotJob).where(BotJob.user_id == user.id))
     job = result.scalar_one_or_none()
     return {
         "ok": True,
+        "user_id": user.id,
         "stream_url": job.stream_url if job else "",
         "video_id": job.video_id if job else "",
         "mode": job.mode if job else "oauth",
@@ -419,10 +574,13 @@ async def get_stream_url_setting(
 
 @router.post("/api/settings/stream-url")
 async def save_stream_url_setting(
+    request: Request,
     body: StreamUrlBody,
-    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    user, _ = await resolve_api_user_optional(request, db)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not signed in")
     clean_url = body.stream_url.strip()
     video_id = parse_video_id(clean_url) or ""
     result = await db.execute(select(BotJob).where(BotJob.user_id == user.id))
@@ -511,8 +669,7 @@ async def api_start_bot(
     mode = body.mode if body.mode in ("oauth", "cookie") else "oauth"
     interval = max(5, min(3600, body.interval_seconds))
 
-    # CRITICAL: Always persist stream_url, video_id, mode, and interval to database FIRST!
-    # Even if chat lookup or YouTube API returns an error below, the URL is permanently kept.
+    # Persist stream_url, video_id, mode, and interval to database first
     result = await db.execute(select(BotJob).where(BotJob.user_id == user.id))
     job = result.scalar_one_or_none()
     if job:
@@ -537,24 +694,16 @@ async def api_start_bot(
     title = video_id
 
     if mode == "cookie":
-        from app.models import UserCookie
         c_res = await db.execute(select(UserCookie).where(UserCookie.user_id == user.id))
         if not c_res.scalar_one_or_none():
-            # If no cookie exists but Google OAuth is connected, gracefully fall back to OAuth!
-            oauth_check = await db.execute(select(OAuthToken).where(OAuthToken.user_id == user.id))
-            if oauth_check.scalar_one_or_none():
-                mode = "oauth"
-                job.mode = "oauth"
-                await db.commit()
-            else:
-                raise HTTPException(status_code=400, detail="Connect Google/YouTube first (tap Connect Google above).")
-
-    if mode == "oauth":
-        result = await db.execute(select(OAuthToken).where(OAuthToken.user_id == user.id))
-        if not result.scalar_one_or_none():
+            raise HTTPException(
+                status_code=400,
+                detail="Web Cookie not configured for this account. Sync/save your YouTube cookie first or select Google OAuth API.",
+            )
+    else:
+        o_res = await db.execute(select(OAuthToken).where(OAuthToken.user_id == user.id))
+        if not o_res.scalar_one_or_none():
             raise HTTPException(status_code=400, detail="Connect Google/YouTube first (tap Connect Google above).")
-
-        from app.auth.google_oauth import get_access_token_for_user
 
         access = await get_access_token_for_user(db, user.id)
         if not access:
@@ -573,22 +722,36 @@ async def api_start_bot(
     await db.commit()
 
     await start_bot_task(user.id)
-    return {"ok": True, "video_title": title, "mode": mode, "status": "running"}
+    return {"ok": True, "video_title": title, "mode": mode, "status": "running", "user_id": user.id}
 
 
 @router.post("/api/bots/stop")
 async def api_stop_bot(user: User = Depends(get_current_user)):
     await stop_bot_task(user.id)
-    return {"ok": True, "status": "stopped"}
+    return {"ok": True, "status": "stopped", "user_id": user.id}
 
 
 @router.get("/api/bots/status")
 async def api_bot_status(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(BotJob).where(BotJob.user_id == user.id))
     job = result.scalar_one_or_none()
+    o_res = await db.execute(select(OAuthToken).where(OAuthToken.user_id == user.id))
+    oauth = o_res.scalar_one_or_none()
     if not job:
-        return {"status": "stopped", "running": False, "interval_seconds": 30, "mode": "oauth", "video_id": ""}
+        return {
+            "user_id": user.id,
+            "email": user.email,
+            "google_email": oauth.google_email if oauth else None,
+            "status": "stopped",
+            "running": False,
+            "interval_seconds": 30,
+            "mode": "oauth",
+            "video_id": "",
+        }
     return {
+        "user_id": user.id,
+        "email": user.email,
+        "google_email": oauth.google_email if oauth else None,
         "status": job.status,
         "running": is_bot_running(user.id),
         "messages_sent": job.messages_sent,
@@ -647,7 +810,6 @@ async def delete_phrase(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    from sqlalchemy import delete
     if body.phrase_id:
         await db.execute(delete(UserPhrase).where(UserPhrase.id == body.phrase_id, UserPhrase.user_id == user.id))
     elif body.phrase:
@@ -661,8 +823,13 @@ async def preview_sample_comment(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    from app.bot.engine import _load_custom_phrases
-    from app.bot.messages import MessageGenerator
     phrases = await _load_custom_phrases(db, user.id)
     gen = MessageGenerator(custom_phrases=phrases)
     return {"ok": True, "message": gen.next_message()}
+
+
+@router.get("/api/chats/conversation-stats")
+async def conversation_chat_stats(
+    user: User = Depends(get_current_user),
+):
+    return {"ok": True, "user_id": user.id, **get_conversation_db_stats()}

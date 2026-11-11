@@ -21,7 +21,7 @@ def google_redirect_uri(app_url: str | None = None) -> str:
     return f"{base}/auth/google/callback"
 
 
-def build_google_authorize_url(state: str, redirect_uri: str) -> str:
+def build_google_authorize_url(state: str, redirect_uri: str, login_hint: str | None = None) -> str:
     settings = get_settings()
     params = {
         "client_id": settings.google_client_id,
@@ -32,6 +32,8 @@ def build_google_authorize_url(state: str, redirect_uri: str) -> str:
         "prompt": "consent select_account",
         "state": state,
     }
+    if login_hint:
+        params["login_hint"] = login_hint
     return f"{GOOGLE_AUTH_URL}?{urlencode(params)}"
 
 

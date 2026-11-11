@@ -1,0 +1,338 @@
+{
+  "description": "Progressive conversational live-chat database: from 'How are you?' greetings to building an engaging conversation.",
+  "stages": {
+    "1_how_are_you": [
+      "Hey everyone! How are you all doing today?",
+      "How are you doing today? Hope your day has been treating you well",
+      "Hi chat! How is everyone feeling right now?",
+      "Hello everyone! How are you all doing so far?",
+      "Hey there, how are you? Just hopped onto the stream",
+      "What's up chat! How are you all doing today?",
+      "Good to see everyone here, how are you doing?",
+      "Hey folks, how are you holding up today?",
+      "Hi everyone! How are you doing this evening?",
+      "How are you all? Excited to hang out in chat today",
+      "Hey! How are you doing today, everything good on your end?",
+      "Hello chat, how are you guys doing? Ready for a good session",
+      "Hope everyone is doing awesome today — how are you all?",
+      "Hey bhai, how are you? Good to catch the live today",
+      "Kaise ho sab log? How are you all doing today?",
+      "Hello sabko! Kaise ho sab, how is your day going?",
+      "Hey friends, how are you doing right now?",
+      "Hi all! How are you today, hope everyone's staying positive",
+      "Hey chat, how are you guys? Just tuned in to hang out",
+      "What's good everyone, how are you doing today?",
+      "How are you feeling today chat? Long day or chill day?",
+      "Hey everyone! How are you? Glad I caught this live on time",
+      "Hiya chat, how are you doing? Good vibes only today",
+      "Namaste sabko! How are you all doing today?",
+      "Hey guys, how are you doing? Anyone else just getting settled in?",
+      "How are you today everyone? Hope your week is going smoothly",
+      "Hey streamer and chat, how are you all doing today?",
+      "Yo chat! How are you guys doing right now?",
+      "Hello everyone, how are you? Always nice hanging out here",
+      "Hey there! How are you all doing, hope you're having a good one",
+      "Sab log kaise ho? How's everyone doing in chat right now?",
+      "Hey all, how are you doing? Let's have a great chat today"
+    ],
+    "2_check_in_and_warmup": [
+      "I'm doing pretty well today, just relaxing and watching the stream",
+      "Doing great over here, honestly needed a chill stream to unwind",
+      "Main toh badhiya hoon, bas aaram se live enjoy kar raha hoon",
+      "Just finished up work for the day and jumped straight into chat",
+      "Where is everyone watching from today? Drop your city or country!",
+      "What time is it over where you're watching from?",
+      "Anyone else grabbing tea, coffee, or snacks while watching?",
+      "Chai or coffee while watching today's stream? What's your pick?",
+      "How has your week been treating you all so far?",
+      "Was today a busy day for you guys or pretty relaxed?",
+      "Who else is watching while multitasking or studying right now?",
+      "Is everyone here a regular viewer or anyone joining for the first time?",
+      "How's the weather at your place today? Over here it's super chill",
+      "Sab log kahan se dekh rahe ho aaj? Always fun seeing different places",
+      "Aaj ka din kaisa gaya sabka? Hope it went well",
+      "Just grabbed a cup of chai and settled in for the stream",
+      "Honestly feels nice having a live chat to chill in after a long day",
+      "Anyone else staying up a bit late just to catch this live?",
+      "Watching from my phone right now while taking a quick break",
+      "Good to see familiar names in chat again today",
+      "If you're new here, welcome in! How did you find the stream?",
+      "Weekend plans ban gaye sabke ya abhi kuch decide nahi kiya?",
+      "I'm doing solid today, mood is way better now that the live started",
+      "Anyone watching with headphones on or speakers blasting?",
+      "So glad I checked YouTube right when this went live",
+      "Kya haal chaal hain sabke? Dinner ho gaya ya abhi baaki hai?",
+      "Just chilling in the background and reading everyone's messages",
+      "Always nice when the chat starts warming up like this"
+    ],
+    "3_topic_openers": [
+      "So what got everyone interested in today's topic?",
+      "Quick question for chat: what is your honest take on this?",
+      "I was actually thinking about something similar earlier today — what do you guys think?",
+      "How did you all first discover this channel?",
+      "What has been your favorite moment of the stream so far?",
+      "Curious to hear everyone's perspective on what's happening right now",
+      "Wait, do most people in chat agree with that or see it differently?",
+      "If you had to rate today's session so far out of 10, what would you give it?",
+      "Let's start a real debate in chat — what would you do in this situation?",
+      "Aaj ke topic pe sabka kya opinion hai? Let's hear it",
+      "What made you all click on the stream today — the title or just the vibe?",
+      "Has anyone here tried something like this before? How did it go?",
+      "Which part of today's discussion stood out to you the most?",
+      "Do you guys prefer chill Q&A streams or deep-dive topic sessions?",
+      "Wait, what do you think happens next from here?",
+      "Curious — what's one thing you learned recently that surprised you?",
+      "Let's hear some honest opinions, don't hold back chat",
+      "Batao yaar, agar tum is jagah hote toh kya karte?",
+      "What's everyone's favorite memory from past streams here?",
+      "Honestly, which side of this argument makes more sense to you guys?",
+      "What's one goal you're working on right now that you're excited about?",
+      "Does anyone else feel like this topic doesn't get talked about enough?",
+      "Aaj sabse interesting baat kya lagi abhi tak?",
+      "If we could ask one big question right now, what should it be?"
+    ],
+    "4_conversation_builders": [
+      "That's actually a really solid point, hadn't looked at it that way",
+      "Wait really? How did that even happen in the first place?",
+      "I totally get what you mean, that part is super relatable",
+      "Okay now I'm genuinely curious — what happened next?",
+      "Honestly, you explained that way clearer than I expected",
+      "Fair enough, I can definitely see both sides of that",
+      "Wait hold on, let's unpack that point a little more",
+      "Same! That's literally what I was trying to figure out earlier",
+      "True, when you put it like that it actually makes a lot of sense",
+      "Haan bilkul sahi bola, that's such a valid point",
+      "Love how everyone in chat is actually sharing thoughtful replies today",
+      "Wait so how long have you thought about it that way?",
+      "That's so true, most people overlook that detail completely",
+      "Wait, does anyone else have a completely opposite experience with that?",
+      "Interesting take! What made you change your mind on it?",
+      "Oh nice, I didn't realize so many people here felt the same way",
+      "Sahi baat hai, experience se hi asli samajh aati hai",
+      "Hold up, that comment just gave me a whole new perspective",
+      "Haha I knew someone in chat was going to bring that up eventually",
+      "Seriously though, that's the exact reason this discussion is so good",
+      "I actually agree with half of that, though the other half is debatable",
+      "Wait tell us more about that, sounds like there's a whole story behind it",
+      "Totally relatable — I think almost everyone runs into that at some point",
+      "Bilkul! Aur uske baad kya hua, that's the real question",
+      "That makes total sense now, thanks for breaking it down",
+      "Yes! This is the exact kind of back-and-forth that makes live chat fun",
+      "Honestly that answer surprised me, didn't expect so many to agree",
+      "Good catch! I almost missed that detail until you mentioned it"
+    ],
+    "5_deepening_and_keeping_alive": [
+      "Let's keep this conversation rolling — what else is on everyone's mind?",
+      "Anyone else in chat got a similar story? Would love to hear it",
+      "I love how friendly and engaging everyone in chat is today",
+      "Speaking of that, what are you all looking forward to next?",
+      "Wait before we move on, did everyone agree on that earlier point?",
+      "Honestly a good conversation in chat makes the whole stream 10x better",
+      "What topic should we jump into next while everyone's active?",
+      "Glad I stuck around today, this conversation got genuinely interesting",
+      "Reading everyone's different viewpoints here is actually really refreshing",
+      "Chalo let's hear from the quiet folks watching too — jump in and say hi!",
+      "It's cool how a random 'how are you' turns into a full-on discussion",
+      "Keep the thoughts coming chat, every reply adds something new",
+      "So if we wrap up this point, what's the biggest takeaway for you?",
+      "This community really knows how to keep a great conversation going",
+      "Wait, let's connect that back to what we were talking about earlier",
+      "Yahan ki community kaafi chill aur respectful hai, maza aata hai baat karke",
+      "Anyone still lurking in chat? Come join the conversation, we don't bite!",
+      "At this rate chat could talk about this for another hour easily",
+      "Love the balance of jokes and real conversation in here tonight",
+      "Alright chat, what's one thing today's discussion made you think twice about?",
+      "Hope we keep seeing conversations like this in every live session",
+      "So overall, are we feeling optimistic about how this plays out?"
+    ]
+  },
+  "conversation_arcs": [
+    [
+      "Hey everyone! How are you all doing today?",
+      "I'm doing great over here, just settling in with a drink to watch",
+      "Where is everyone tuning in from right now?",
+      "Love seeing people from all over hanging out in the same chat",
+      "So what's been the best part of your day or week so far?"
+    ],
+    [
+      "Hi chat! How are you doing this evening?",
+      "Hope everyone had a smooth day before jumping onto the live",
+      "Quick question — what got you all interested in today's topic?",
+      "That's actually a really cool angle, never thought of it like that",
+      "What do you guys think is the biggest takeaway from all of this?"
+    ],
+    [
+      "Hello everyone, how are you feeling today?",
+      "Just wrapped up everything on my end and came straight to chill here",
+      "Anyone grabbing chai, coffee, or snacks while we talk?",
+      "Honestly a cozy vibe like this makes it so easy to start talking",
+      "Speaking of which, what topic has been on your mind all week?"
+    ],
+    [
+      "What's up chat! How are you all holding up today?",
+      "Doing good on my side — glad I didn't miss the start of this",
+      "Curious to know, how did you guys first find this stream?",
+      "Oh nice, it's always fun hearing how everyone ended up in the same community",
+      "Let's keep the chat going — what makes you come back to live streams?"
+    ],
+    [
+      "Kaise ho sab log? How are you all doing today?",
+      "Main toh badhiya hoon, bas aaram se stream aur chat enjoy kar raha hoon",
+      "Aaj sabka din kaisa gaya? Busy tha ya kaafi chill?",
+      "Sahi hai yaar, shaam ko thoda achha discussion ho jaye toh mood fresh ho jata hai",
+      "Chalo aaj ke topic pe apna honest opinion share karo sab log!"
+    ],
+    [
+      "Hey there! How are you doing today?",
+      "Honestly I'm doing pretty good, always look forward to live chat nights",
+      "Do you guys ever notice how fast time flies when chat is active?",
+      "Wait that's so true — half the fun is bouncing ideas off everyone here",
+      "So what should we talk about next while the stream keeps rolling?"
+    ],
+    [
+      "Hey folks, how are you all doing right now?",
+      "Watching from my phone while taking a quick break — feels good to catch up",
+      "If you had to explain today's topic to a friend in one line, how would you say it?",
+      "Haha wait that's actually a super accurate way to put it",
+      "Anyone else got a wild story or example that fits this?"
+    ],
+    [
+      "Hello sabko! How are you guys doing tonight?",
+      "Sab log safe aur khush raho — dinner wagairah ho gaya sabka?",
+      "Aaj ke session mein ek cheez kaafi interesting lagi mujhe, notice kiya kisi ne?",
+      "Haan bilkul, jab detail mein dekho toh poora scene clear samajh aata hai",
+      "Baaki sab log bhi apna point batao, maza aa raha hai conversation mein"
+    ],
+    [
+      "Good evening chat! How are you all doing?",
+      "Doing awesome here — energy in the room feels super welcoming today",
+      "Are most of you team morning person or total night owls?",
+      "Haha looks like half the chat runs on late-night energy just like me",
+      "Makes sense why the late chat conversations always end up being the best ones"
+    ],
+    [
+      "Hey everyone, how are you doing? Hope your day is going well",
+      "Was looking forward to a relaxed conversation in chat today",
+      "What's one small win you had this week that made you smile?",
+      "Love hearing wins like that — honestly gives the whole chat good energy",
+      "Let's keep that momentum going, what's everyone working toward next?"
+    ],
+    [
+      "Hi everyone! How are you all doing so far?",
+      "First time catching the full live in a few days, feels great to be back",
+      "Did I miss any big discussions earlier or are we just getting started?",
+      "Nice! Let's jump right into it — curious what side everyone is leaning toward",
+      "Wait explain why you think that, I'm genuinely interested in your reasoning"
+    ],
+    [
+      "Hey bhai log, kaise ho sab? How are you all?",
+      "Sab badhiya chal raha hai idhar, chai ready hai aur chat bhi active hai",
+      "Waise aaj kal sabse zyada time kis cheez mein ja raha hai tum logon ka?",
+      "Relatable yaar, sab log apni apni hustle aur routine mein lage hue hain",
+      "Isliye aisi live conversations thoda mind refresh karne ke liye best hoti hain"
+    ]
+  ],
+  "templates": [
+    "Hey {audience}, how are you {time_phrase}? {checkin_hook}",
+    "How are you doing today {audience}? {warmup_question}",
+    "I'm feeling {mood} today, just {activity} — how about everyone else?",
+    "Quick question for {audience}: {opener_question}",
+    "Wait, {reaction} What do you guys think about {topic_idea}?",
+    "{agreement_phrase} — {followup_question}",
+    "Honestly {reflection}, anyone else feel the same way?",
+    "Love how {group_noun} keeps the vibe going — {continuation_hook}"
+  ],
+  "word_banks": {
+    "audience": [
+      "everyone",
+      "chat",
+      "friends",
+      "folks",
+      "guys",
+      "y'all",
+      "bhai log"
+    ],
+    "group_noun": [
+      "everyone",
+      "chat",
+      "this community",
+      "the room",
+      "the crowd"
+    ],
+    "time_phrase": [
+      "doing today",
+      "feeling right now",
+      "doing this evening",
+      "holding up today",
+      "doing so far"
+    ],
+    "checkin_hook": [
+      "Hope your day is going great",
+      "Good to hang out here",
+      "Just jumped in to chat",
+      "Ready for a great conversation",
+      "Hope everyone's staying relaxed"
+    ],
+    "warmup_question": [
+      "Where is everyone tuning in from?",
+      "What's everyone snacking on or sipping today?",
+      "Busy day or chill day for you?",
+      "Anyone else unwinding here after work or study?"
+    ],
+    "mood": [
+      "pretty good",
+      "super chill",
+      "energized",
+      "relaxed",
+      "great"
+    ],
+    "activity": [
+      "catching the stream with some tea",
+      "hanging out and reading chat",
+      "taking a break to watch live",
+      "chilling after a long day"
+    ],
+    "opener_question": [
+      "what got you interested in today's topic?",
+      "what's been the highlight of your week so far?",
+      "what's your honest take on what's happening right now?",
+      "how did you first find this channel?"
+    ],
+    "reaction": [
+      "that's actually a super interesting point.",
+      "I never thought about it from that angle.",
+      "now I'm genuinely curious!",
+      "that makes a whole lot of sense."
+    ],
+    "topic_idea": [
+      "where this is heading next",
+      "the main point being discussed",
+      "trying something like this yourself",
+      "how everyone sees this differently"
+    ],
+    "agreement_phrase": [
+      "Totally get what you mean",
+      "That's such a valid point",
+      "Honestly I feel the exact same way",
+      "Fair enough, both sides make sense"
+    ],
+    "followup_question": [
+      "what happened next after that?",
+      "what made you look at it that way?",
+      "anyone else have a similar experience?",
+      "what should we dive into next?"
+    ],
+    "reflection": [
+      "a good conversation makes any stream way better",
+      "hearing everyone's different takes is the best part of live chat",
+      "this chat always feels super welcoming",
+      "it's awesome when a quick hello turns into a real discussion"
+    ],
+    "continuation_hook": [
+      "let's hear what everyone else thinks too!",
+      "what else is on your mind today?",
+      "anyone lurking should come say hi!",
+      "let's keep this discussion rolling"
+    ]
+  }
+}

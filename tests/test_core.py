@@ -234,7 +234,8 @@ async def test_save_cookie_json_endpoint():
     import httpx
     from app.main import app
     from app.db import init_db, async_session_factory
-    from app.models import User, UserCookie
+    from app.deps import ensure_user_sync_token
+    from app.models import User
     from sqlalchemy import select
 
     await init_db()
@@ -245,18 +246,34 @@ async def test_save_cookie_json_endpoint():
             user = User(email="sync_test@example.com")
             db.add(user)
             await db.commit()
+            await db.refresh(user)
+        sync_token = await ensure_user_sync_token(db, user)
 
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        resp = await client.post(
+        # Unauthenticated cookie sync must be rejected (prevents overwriting another user by email)
+        unauth_resp = await client.post(
             "/api/auth/cookie",
             json={"cookie": "SAPISID=fake_sync; SID=fake_sid;", "email": "sync_test@example.com"},
             headers={"Content-Type": "application/json", "Accept": "application/json"},
+        )
+        assert unauth_resp.status_code == 401
+
+        # Authenticated via personal sync token succeeds and does NOT issue a web session cookie
+        resp = await client.post(
+            "/api/auth/cookie",
+            json={"cookie": "SAPISID=fake_sync; SID=fake_sid;", "email": "sync_test@example.com"},
+            headers={
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                "Authorization": f"Bearer {sync_token}",
+            },
         )
         assert resp.status_code == 200
         data = resp.json()
         assert data.get("ok") is True
         assert data.get("user") == "sync_test@example.com"
+        assert "session" not in resp.cookies
 
 
 @pytest.mark.anyio
@@ -350,6 +367,32 @@ async def test_innertube_params_override_sign_in_text(monkeypatch):
     assert "test_sapisid" in res
 
 
+async def _create_authenticated_client(app, email: str):
+    import httpx
+    from sqlalchemy import select
+    from app.db import async_session_factory, init_db
+    from app.models import User
+    from app.security import create_session_cookie
+
+    await init_db()
+    async with async_session_factory() as db:
+        res = await db.execute(select(User).where(User.email == email))
+        user = res.scalar_one_or_none()
+        if not user:
+            user = User(email=email)
+            db.add(user)
+            await db.commit()
+            await db.refresh(user)
+
+    transport = httpx.ASGITransport(app=app)
+    client = httpx.AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        cookies={"session": create_session_cookie(user.id)},
+    )
+    return client, user
+
+
 @pytest.mark.anyio
 async def test_api_me_endpoint():
     import httpx
@@ -358,26 +401,32 @@ async def test_api_me_endpoint():
 
     await init_db()
     transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+    # Unauthenticated client must get authenticated=False and no leaked suggested_email
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as unauth_client:
+        resp = await unauth_client.get("/api/me")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["authenticated"] is False
+        assert data.get("suggested_email") is None
+
+    # Authenticated client gets its own profile
+    auth_client, user = await _create_authenticated_client(app, "me_test@example.com")
+    async with auth_client as client:
         resp = await client.get("/api/me")
         assert resp.status_code == 200
         data = resp.json()
-        assert "authenticated" in data
         assert data["authenticated"] is True
+        assert data["email"] == "me_test@example.com"
+        assert data["user_id"] == user.id
         assert "stream_url" in data
 
 
 @pytest.mark.anyio
 async def test_stream_url_saved_and_kept_until_updated():
-    import httpx
     from app.main import app
-    from app.db import init_db, async_session_factory
-    from app.models import BotJob, User
-    from sqlalchemy import select
 
-    await init_db()
-    transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+    client, _ = await _create_authenticated_client(app, "stream_keep@example.com")
+    async with client:
         test_link_1 = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
         save_resp = await client.post(
             "/api/settings/stream-url",
@@ -389,17 +438,14 @@ async def test_stream_url_saved_and_kept_until_updated():
         assert save_resp.json()["stream_url"] == test_link_1
         assert save_resp.json()["video_id"] == "dQw4w9WgXcQ"
 
-        # Verify GET returns the saved link
         get_resp = await client.get("/api/settings/stream-url")
         assert get_resp.status_code == 200
         assert get_resp.json()["stream_url"] == test_link_1
 
-        # Verify /api/me also returns the saved link
         me_resp = await client.get("/api/me")
         assert me_resp.status_code == 200
         assert me_resp.json()["stream_url"] == test_link_1
 
-        # Now update the link
         test_link_2 = "https://www.youtube.com/live/jfKfPfyJRdk"
         update_resp = await client.post(
             "/api/settings/stream-url",
@@ -409,7 +455,6 @@ async def test_stream_url_saved_and_kept_until_updated():
         assert update_resp.status_code == 200
         assert update_resp.json()["stream_url"] == test_link_2
 
-        # Verify new link is now kept
         get_resp2 = await client.get("/api/settings/stream-url")
         assert get_resp2.status_code == 200
         assert get_resp2.json()["stream_url"] == test_link_2
@@ -417,24 +462,18 @@ async def test_stream_url_saved_and_kept_until_updated():
 
 @pytest.mark.anyio
 async def test_stream_url_persists_even_if_bot_start_errors():
-    import httpx
     from app.main import app
-    from app.db import init_db
 
-    await init_db()
-    transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+    client, _ = await _create_authenticated_client(app, "stream_persist_err@example.com")
+    async with client:
         offline_stream = "https://www.youtube.com/watch?v=offline1234"
-        # Starting with an offline stream / unconfigured OAuth throws 400
         start_resp = await client.post(
             "/api/bots/start",
             json={"stream_url": offline_stream, "interval_seconds": 15, "mode": "oauth"},
             headers={"Content-Type": "application/json"},
         )
-        # It errors because Google OAuth is not connected
         assert start_resp.status_code == 400
 
-        # But the stream URL must STILL be saved in the database and retrieved!
         get_resp = await client.get("/api/settings/stream-url")
         assert get_resp.status_code == 200
         assert get_resp.json()["stream_url"] == offline_stream
@@ -444,13 +483,10 @@ async def test_stream_url_persists_even_if_bot_start_errors():
 
 @pytest.mark.anyio
 async def test_runner_settings_persisted():
-    import httpx
     from app.main import app
-    from app.db import init_db
 
-    await init_db()
-    transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+    client, _ = await _create_authenticated_client(app, "runner_settings@example.com")
+    async with client:
         resp = await client.post(
             "/api/settings/runner",
             json={"mode": "cookie", "interval_seconds": 10},
@@ -467,23 +503,320 @@ async def test_runner_settings_persisted():
 
 
 @pytest.mark.anyio
-async def test_persistent_session_and_credentials_never_forgotten():
+async def test_unauthenticated_visitor_does_not_inherit_other_users_session():
     import httpx
     from app.main import app
     from app.db import init_db
 
     await init_db()
+    # Ensure another user already exists in DB
+    existing_client, _ = await _create_authenticated_client(app, "owner_user@example.com")
+    async with existing_client:
+        await existing_client.post(
+            "/api/settings/stream-url",
+            json={"stream_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"},
+        )
+
     transport = httpx.ASGITransport(app=app)
-    # Brand new client with NO cookies
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        # Visiting home page without cookies
+    # Brand new visitor with NO cookies must see Sign-In screen and receive NO session cookie
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as visitor:
+        resp = await visitor.get("/")
+        assert resp.status_code == 200
+        assert "session" not in resp.cookies
+        assert "Sign in with Google" in resp.text
+        assert "Live Stream Bot Runner" not in resp.text
+        assert "owner_user@example.com" not in resp.text
+
+    # Authenticated user keeps persistent session cookie across visits
+    auth_client, _ = await _create_authenticated_client(app, "owner_user@example.com")
+    async with auth_client as client:
         resp = await client.get("/")
         assert resp.status_code == 200
-        # A persistent session cookie must be issued to the client
         assert "session" in resp.cookies
-        # The page must NOT be blocked by the empty login screen
         assert "Live Stream Bot Runner" in resp.text
         assert "Target YouTube Live Stream URL" in resp.text
+
+
+@pytest.mark.anyio
+async def test_multi_user_isolation_and_account_mismatch_guards():
+    from sqlalchemy import select
+    from app.db import async_session_factory
+    from app.deps import ensure_user_sync_token
+    from app.main import app
+    from app.models import BotJob, BotJobStatus, User, UserCookie
+    from app.security import decrypt_text
+
+    client_a, user_a = await _create_authenticated_client(app, "alice_iso@example.com")
+    client_b, user_b = await _create_authenticated_client(app, "bob_iso@example.com")
+
+    async with async_session_factory() as db:
+        res_a = await db.execute(select(User).where(User.id == user_a.id))
+        u_a = res_a.scalar_one()
+        token_a = await ensure_user_sync_token(db, u_a)
+
+        res_b = await db.execute(select(User).where(User.id == user_b.id))
+        u_b = res_b.scalar_one()
+        token_b = await ensure_user_sync_token(db, u_b)
+
+    assert token_a != token_b
+
+    async with client_a, client_b:
+        # Both users save distinct cookies and distinct streams
+        r_a = await client_a.post(
+            "/api/auth/cookie",
+            json={"cookie": "SAPISID=alice_sapi; SID=alice_sid;", "email": "alice_iso@example.com"},
+            headers={"Authorization": f"Bearer {token_a}"},
+        )
+        assert r_a.status_code == 200
+
+        r_b = await client_b.post(
+            "/api/auth/cookie",
+            json={"cookie": "SAPISID=bob_sapi; SID=bob_sid;", "email": "bob_iso@example.com"},
+            headers={"Authorization": f"Bearer {token_b}"},
+        )
+        assert r_b.status_code == 200
+
+        # Mismatched email with Alice's sync token must be rejected with 409!
+        mismatch = await client_b.post(
+            "/api/auth/cookie",
+            json={"cookie": "SAPISID=attacker; SID=attacker;", "email": "bob_iso@example.com"},
+            headers={"Authorization": f"Bearer {token_a}"},
+        )
+        assert mismatch.status_code == 409
+
+        # Stale tab X-User-Id mismatch guard
+        stale_tab = await client_a.post(
+            "/api/settings/stream-url",
+            json={"stream_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"},
+            headers={"X-User-Id": str(user_b.id)},
+        )
+        assert stale_tab.status_code == 409
+
+        # Verify Alice's cookie was NOT overwritten by Bob's sync or mismatch attempt
+        async with async_session_factory() as db:
+            ca = (await db.execute(select(UserCookie).where(UserCookie.user_id == user_a.id))).scalar_one()
+            cb = (await db.execute(select(UserCookie).where(UserCookie.user_id == user_b.id))).scalar_one()
+            assert "alice_sapi" in decrypt_text(ca.cookie_encrypted)
+            assert "bob_sapi" in decrypt_text(cb.cookie_encrypted)
+
+        # Verify auto_sync=True does not hijack a running OAuth job's mode
+        async with async_session_factory() as db:
+            job_a = (await db.execute(select(BotJob).where(BotJob.user_id == user_a.id))).scalar_one_or_none()
+            if not job_a:
+                job_a = BotJob(
+                    user_id=user_a.id,
+                    stream_url="https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                    video_id="dQw4w9WgXcQ",
+                    live_chat_id="lc_alice",
+                    mode="oauth",
+                    status=BotJobStatus.RUNNING.value,
+                )
+                db.add(job_a)
+            else:
+                job_a.mode = "oauth"
+                job_a.status = BotJobStatus.RUNNING.value
+            await db.commit()
+
+        auto_sync_res = await client_a.post(
+            "/api/auth/cookie",
+            json={
+                "cookie": "SAPISID=alice_sapi_v2; SID=alice_sid;",
+                "email": "alice_iso@example.com",
+                "auto_sync": True,
+            },
+            headers={"Authorization": f"Bearer {token_a}"},
+        )
+        assert auto_sync_res.status_code == 200
+        async with async_session_factory() as db:
+            job_a_after = (await db.execute(select(BotJob).where(BotJob.user_id == user_a.id))).scalar_one()
+            assert job_a_after.mode == "oauth"
+            job_a_after.status = BotJobStatus.STOPPED.value
+            await db.commit()
+
+
+@pytest.mark.anyio
+async def test_google_oauth_callback_blocks_account_mismatch(monkeypatch):
+    from sqlalchemy import select
+    from app.auth.oauth_state import create_oauth_state
+    from app.db import async_session_factory
+    from app.main import app
+    from app.models import OAuthToken, User
+    from app.routes import web
+    from app.security import encrypt_text
+
+    client_alice, user_alice = await _create_authenticated_client(app, "alice_oauth@gmail.com")
+    _, user_bob = await _create_authenticated_client(app, "bob_oauth@gmail.com")
+
+    async with async_session_factory() as db:
+        res = await db.execute(select(OAuthToken).where(OAuthToken.user_id == user_alice.id))
+        if not res.scalar_one_or_none():
+            db.add(
+                OAuthToken(
+                    user_id=user_alice.id,
+                    google_email="alice_oauth@gmail.com",
+                    refresh_token_encrypted=encrypt_text("alice_refresh_token"),
+                )
+            )
+            await db.commit()
+        await create_oauth_state(
+            db,
+            state="mismatch_state_1",
+            redirect_uri="http://test/auth/google/callback",
+            user_id=user_alice.id,
+        )
+
+    async def fake_exchange(code: str, redirect_uri: str) -> dict:
+        return {"refresh_token": "bob_refresh_token", "access_token": "bob_access"}
+
+    async def fake_email(access: str) -> str:
+        return "bob_oauth@gmail.com"
+
+    monkeypatch.setattr(web, "exchange_code_for_tokens", fake_exchange)
+    monkeypatch.setattr(web, "fetch_google_email", fake_email)
+
+    async with client_alice:
+        resp = await client_alice.get(
+            "/auth/google/callback?code=abc&state=mismatch_state_1",
+            follow_redirects=False,
+        )
+        assert resp.status_code == 303
+        assert "auth_error=account_mismatch" in resp.headers["location"]
+
+    # Alice's refresh token must remain untouched!
+    async with async_session_factory() as db:
+        from app.auth.google_oauth import get_user_refresh_token
+
+        tok = await get_user_refresh_token(db, user_alice.id)
+        assert tok == "alice_refresh_token"
+
+
+@pytest.mark.anyio
+async def test_concurrent_multi_user_bots_and_isolated_innertube_cache(monkeypatch):
+    import asyncio
+    from app.bot.engine import is_bot_running, stop_bot_task
+    from app.db import async_session_factory
+    from app.main import app
+    from app.models import BotJob
+    from app.youtube import live_chat
+    from sqlalchemy import select
+
+    live_chat.invalidate_innertube_cache()
+
+    client_1, user_1 = await _create_authenticated_client(app, "concurrent_1@example.com")
+    client_2, user_2 = await _create_authenticated_client(app, "concurrent_2@example.com")
+
+    sent_log: list[tuple[int | None, str, str]] = []
+
+    async def fake_send_innertube(cookie_string: str, video_id: str, message: str, user_id: int | None = None) -> str:
+        sent_log.append((user_id, cookie_string, video_id))
+        return cookie_string
+
+    monkeypatch.setattr("app.bot.engine.send_innertube_live_chat_message", fake_send_innertube)
+
+    async with client_1, client_2:
+        await client_1.post(
+            "/api/auth/cookie",
+            json={"cookie": "SAPISID=user1_sapi; SID=user1_sid;"},
+        )
+        await client_2.post(
+            "/api/auth/cookie",
+            json={"cookie": "SAPISID=user2_sapi; SID=user2_sid;"},
+        )
+
+        # Both users start bots at the same time on the exact same stream URL
+        r1 = await client_1.post(
+            "/api/bots/start",
+            json={"stream_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ", "interval_seconds": 5, "mode": "cookie"},
+        )
+        r2 = await client_2.post(
+            "/api/bots/start",
+            json={"stream_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ", "interval_seconds": 5, "mode": "cookie"},
+        )
+        assert r1.status_code == 200
+        assert r2.status_code == 200
+
+        await asyncio.sleep(0.25)
+        assert is_bot_running(user_1.id) is True
+        assert is_bot_running(user_2.id) is True
+
+        # Both users sent comments using ONLY their own respective cookies
+        user1_sends = [entry for entry in sent_log if entry[0] == user_1.id]
+        user2_sends = [entry for entry in sent_log if entry[0] == user_2.id]
+        assert len(user1_sends) >= 1
+        assert len(user2_sends) >= 1
+        assert all("user1_sapi" in s[1] for s in user1_sends)
+        assert all("user2_sapi" in s[1] for s in user2_sends)
+
+        # Stopping user_1 leaves user_2 running!
+        await client_1.post("/api/bots/stop")
+        assert is_bot_running(user_1.id) is False
+        assert is_bot_running(user_2.id) is True
+
+        await stop_bot_task(user_2.id)
+        assert is_bot_running(user_2.id) is False
+
+    # Verify DB statuses cleanly stopped
+    async with async_session_factory() as db:
+        j1 = (await db.execute(select(BotJob).where(BotJob.user_id == user_1.id))).scalar_one()
+        j2 = (await db.execute(select(BotJob).where(BotJob.user_id == user_2.id))).scalar_one()
+        assert j1.status == "stopped"
+        assert j2.status == "stopped"
+
+
+@pytest.mark.anyio
+async def test_innertube_cache_isolated_per_user():
+    from app.youtube.live_chat import _innertube_cache, invalidate_innertube_cache
+
+    invalidate_innertube_cache()
+    _innertube_cache["u1:vid123:hashA"] = {"params": "p1"}
+    _innertube_cache["u2:vid123:hashB"] = {"params": "p2"}
+
+    invalidate_innertube_cache(user_id=1)
+    assert "u1:vid123:hashA" not in _innertube_cache
+    assert "u2:vid123:hashB" in _innertube_cache
+    invalidate_innertube_cache()
+
+
+def test_conversation_chat_database_progression():
+    from app.bot.messages import STAGE_ORDER, MessageGenerator, get_conversation_db_stats
+
+    stats = get_conversation_db_stats()
+    assert stats["total_stage_phrases"] >= 100
+    assert stats["conversation_arcs"] >= 10
+    for stage in STAGE_ORDER:
+        assert stats["stage_counts"].get(stage, 0) >= 15
+
+    gen = MessageGenerator()
+    first = gen.next_message()
+    # Turn 0 must begin with a "how are you" greeting/check-in
+    first_lower = first.lower()
+    assert any(k in first_lower for k in ("how are you", "kaise ho", "how's", "holding up", "feeling")), (
+        f"Expected opening message to be a 'how are you' greeting, got: {first}"
+    )
+
+    # Generate 100 messages across all conversation stages with zero repeats
+    messages = [first]
+    seen = {first.lower()}
+    for _ in range(99):
+        msg = gen.next_message()
+        assert msg.lower() not in seen
+        seen.add(msg.lower())
+        messages.append(msg)
+    assert len(messages) == 100
+
+
+@pytest.mark.anyio
+async def test_conversation_stats_endpoint():
+    from app.main import app
+
+    client, _ = await _create_authenticated_client(app, "conv_stats@example.com")
+    async with client:
+        resp = await client.get("/api/chats/conversation-stats")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ok"] is True
+        assert "1_how_are_you" in data["stage_counts"]
+        assert "5_deepening_and_keeping_alive" in data["stage_counts"]
 
 
 
