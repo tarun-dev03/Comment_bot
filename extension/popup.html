@@ -4,6 +4,86 @@
   <meta charset="UTF-8">
   <title>YouTube Cookie Auto-Sync</title>
   <style>
+    :root {
+      --bg-base: #f6f4fb;
+      --bg-grad-1: rgba(169, 237, 211, 0.45);
+      --bg-grad-2: rgba(213, 198, 255, 0.45);
+      --text-main: #252236;
+      --text-muted: #5b5570;
+      --text-dim: #7b7491;
+      --surface: #ffffff;
+      --border: rgba(114, 99, 158, 0.16);
+      --input-border: rgba(114, 99, 158, 0.22);
+      --card-shadow: 0 4px 14px rgba(103, 86, 158, 0.06);
+
+      --mint-bg: #dcf8ec;
+      --mint-hover: #c9f2e1;
+      --mint-border: #9fe7c8;
+      --mint-ink: #11583e;
+
+      --lavender-bg: #f2edff;
+      --lavender-hover: #e8e0ff;
+      --lavender-border: #cdbefe;
+      --lavender-ink: #473187;
+
+      --peach-bg: #ffe7dc;
+      --peach-border: #f8bea4;
+      --peach-ink: #7d3b22;
+
+      --sky-bg: #dff2ff;
+      --sky-border: #9bd4fa;
+      --sky-ink: #17547d;
+
+      --dot-idle: #9f98b3;
+      --dot-green: #27a876;
+      --dot-green-glow: rgba(39, 168, 118, 0.35);
+      --dot-gold: #e89b3c;
+      --focus-border: #84d3b6;
+      --focus-ring: rgba(156, 235, 208, 0.35);
+      --accent-control: #6b52ae;
+      color-scheme: light;
+    }
+
+    :root[data-theme="dark"] {
+      --bg-base: #13111c;
+      --bg-grad-1: rgba(116, 224, 181, 0.16);
+      --bg-grad-2: rgba(182, 162, 252, 0.18);
+      --text-main: #f2effa;
+      --text-muted: #b9b2cf;
+      --text-dim: #8f87aa;
+      --surface: #1b1828;
+      --border: rgba(197, 180, 252, 0.18);
+      --input-border: rgba(197, 180, 252, 0.24);
+      --card-shadow: 0 6px 18px rgba(4, 3, 10, 0.45);
+
+      --mint-bg: rgba(116, 224, 181, 0.16);
+      --mint-hover: rgba(116, 224, 181, 0.25);
+      --mint-border: rgba(134, 232, 193, 0.36);
+      --mint-ink: #9cf0ce;
+
+      --lavender-bg: rgba(182, 162, 252, 0.18);
+      --lavender-hover: rgba(182, 162, 252, 0.28);
+      --lavender-border: rgba(197, 180, 252, 0.38);
+      --lavender-ink: #d5c8ff;
+
+      --peach-bg: rgba(248, 176, 148, 0.16);
+      --peach-border: rgba(248, 190, 164, 0.38);
+      --peach-ink: #ffc7b2;
+
+      --sky-bg: rgba(130, 206, 252, 0.16);
+      --sky-border: rgba(155, 212, 250, 0.38);
+      --sky-ink: #aee0ff;
+
+      --dot-idle: #8f87aa;
+      --dot-green: #5ce2b0;
+      --dot-green-glow: rgba(92, 226, 176, 0.4);
+      --dot-gold: #fce79c;
+      --focus-border: #c5b4fc;
+      --focus-ring: rgba(197, 180, 252, 0.28);
+      --accent-control: #a594f9;
+      color-scheme: dark;
+    }
+
     * {
       box-sizing: border-box;
       margin: 0;
@@ -13,13 +93,13 @@
     body {
       width: 348px;
       padding: 16px;
-      background-color: #f6f4fb;
+      background-color: var(--bg-base);
       background-image:
-        radial-gradient(circle at top left, rgba(169, 237, 211, 0.45) 0%, transparent 52%),
-        radial-gradient(circle at bottom right, rgba(213, 198, 255, 0.45) 0%, transparent 52%);
-      color: #252236;
+        radial-gradient(circle at top left, var(--bg-grad-1) 0%, transparent 52%),
+        radial-gradient(circle at bottom right, var(--bg-grad-2) 0%, transparent 52%);
+      color: var(--text-main);
       font-size: 13px;
-      color-scheme: light;
+      transition: background-color 0.2s, color 0.2s;
     }
     .header {
       display: flex;
@@ -27,7 +107,13 @@
       justify-content: space-between;
       margin-bottom: 14px;
       padding-bottom: 10px;
-      border-bottom: 1px solid rgba(114, 99, 158, 0.16);
+      border-bottom: 1px solid var(--border);
+      gap: 8px;
+    }
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 6px;
     }
     .title {
       font-weight: 700;
@@ -35,33 +121,52 @@
       display: flex;
       align-items: center;
       gap: 6px;
-      color: #252236;
+      color: var(--text-main);
     }
     .title-accent {
-      color: #473187;
+      color: var(--lavender-ink);
+    }
+    .theme-btn {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text-main);
+      width: 24px;
+      height: 24px;
+      border-radius: 999px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      line-height: 1;
+      transition: background 0.2s, border-color 0.2s;
+    }
+    .theme-btn:hover {
+      background: var(--lavender-bg);
+      border-color: var(--lavender-border);
     }
     .badge {
       font-size: 10px;
-      background: #ffe7dc;
-      color: #7d3b22;
-      border: 1px solid #f8bea4;
+      background: var(--peach-bg);
+      color: var(--peach-ink);
+      border: 1px solid var(--peach-border);
       padding: 2px 8px;
       border-radius: 999px;
       font-weight: 600;
     }
     .badge.connected {
-      background: #dcf8ec;
-      color: #11583e;
-      border-color: #9fe7c8;
+      background: var(--mint-bg);
+      color: var(--mint-ink);
+      border-color: var(--mint-border);
     }
     .session-card {
-      background: #ffffff;
-      border: 1px solid rgba(114, 99, 158, 0.16);
+      background: var(--surface);
+      border: 1px solid var(--border);
       border-radius: 10px;
       padding: 10px 12px;
       margin-bottom: 12px;
       font-size: 12px;
-      box-shadow: 0 4px 14px rgba(103, 86, 158, 0.06);
+      box-shadow: var(--card-shadow);
     }
     .session-status {
       display: flex;
@@ -74,12 +179,12 @@
       width: 8px;
       height: 8px;
       border-radius: 50%;
-      background: #9f98b3;
+      background: var(--dot-idle);
     }
-    .dot.green { background: #27a876; box-shadow: 0 0 8px rgba(39, 168, 118, 0.35); }
-    .dot.gold { background: #e89b3c; }
+    .dot.green { background: var(--dot-green); box-shadow: 0 0 8px var(--dot-green-glow); }
+    .dot.gold { background: var(--dot-gold); }
     .muted {
-      color: #5b5570;
+      color: var(--text-muted);
       font-size: 11px;
     }
     .field {
@@ -89,16 +194,16 @@
       display: block;
       font-size: 11px;
       font-weight: 600;
-      color: #5b5570;
+      color: var(--text-muted);
       margin-bottom: 4px;
       text-transform: uppercase;
       letter-spacing: 0.45px;
     }
     input, select {
       width: 100%;
-      background: #ffffff;
-      border: 1px solid rgba(114, 99, 158, 0.22);
-      color: #252236;
+      background: var(--surface);
+      border: 1px solid var(--input-border);
+      color: var(--text-main);
       padding: 8px 10px;
       border-radius: 8px;
       font-size: 12px;
@@ -106,8 +211,8 @@
       transition: border-color 0.2s, box-shadow 0.2s;
     }
     input:focus, select:focus {
-      border-color: #84d3b6;
-      box-shadow: 0 0 0 3px rgba(156, 235, 208, 0.35);
+      border-color: var(--focus-border);
+      box-shadow: 0 0 0 3px var(--focus-ring);
     }
     .row {
       display: flex;
@@ -122,14 +227,14 @@
       cursor: pointer;
       font-size: 12px;
       font-weight: 500;
-      color: #252236;
+      color: var(--text-main);
       text-transform: none;
       letter-spacing: 0;
     }
     .toggle-checkbox {
       width: 16px;
       height: 16px;
-      accent-color: #6b52ae;
+      accent-color: var(--accent-control);
       cursor: pointer;
     }
     .btn {
@@ -161,27 +266,32 @@
       padding: 7px 8px;
       font-size: 11px;
       font-weight: 600;
-      background: #f2edff;
-      color: #473187;
-      border: 1px solid #cdbefe;
+      background: var(--lavender-bg);
+      color: var(--lavender-ink);
+      border: 1px solid var(--lavender-border);
       box-shadow: none;
     }
     .btn-sub:hover:not(:disabled) {
-      background: #e8e0ff;
-      border-color: #b7a2fc;
+      background: var(--lavender-hover);
+      border-color: var(--lavender-border);
+    }
+    .btn-sub.is-youtube {
+      background: var(--sky-bg);
+      border-color: var(--sky-border);
+      color: var(--sky-ink);
     }
     .btn-sub-save {
       flex: 1;
       padding: 7px 8px;
       font-size: 11px;
       font-weight: 600;
-      background: #dcf8ec;
-      color: #11583e;
-      border: 1px solid #9fe7c8;
+      background: var(--mint-bg);
+      color: var(--mint-ink);
+      border: 1px solid var(--mint-border);
       box-shadow: none;
     }
     .btn-sub-save:hover:not(:disabled) {
-      background: #c9f2e1;
+      background: var(--mint-hover);
     }
     .status-msg {
       margin-top: 10px;
@@ -193,26 +303,26 @@
     }
     .status-msg.success {
       display: block;
-      background: #dcf8ec;
-      color: #11583e;
-      border: 1px solid #9fe7c8;
+      background: var(--mint-bg);
+      color: var(--mint-ink);
+      border: 1px solid var(--mint-border);
     }
     .status-msg.error {
       display: block;
-      background: #ffe7dc;
-      color: #7d3b22;
-      border: 1px solid #f8bea4;
+      background: var(--peach-bg);
+      color: var(--peach-ink);
+      border: 1px solid var(--peach-border);
     }
     .status-msg.info {
       display: block;
-      background: #dff2ff;
-      color: #17547d;
-      border: 1px solid #9bd4fa;
+      background: var(--sky-bg);
+      color: var(--sky-ink);
+      border: 1px solid var(--sky-border);
     }
     .footer {
       margin-top: 12px;
       font-size: 10px;
-      color: #7b7491;
+      color: var(--text-dim);
       text-align: center;
     }
   </style>
@@ -222,7 +332,10 @@
     <div class="title">
       <span>✨ Comment<span class="title-accent">Bot</span></span>
     </div>
-    <span id="badge-status" class="badge">Checking...</span>
+    <div class="header-right">
+      <button type="button" id="btn-theme" class="theme-btn" title="Switch Light / Dark theme" aria-label="Switch Light or Dark theme">🌙</button>
+      <span id="badge-status" class="badge">Checking...</span>
+    </div>
   </div>
 
   <div class="session-card">
@@ -251,7 +364,7 @@
   <div class="field">
     <div style="display:flex; justify-content:space-between; align-items:center;">
       <label for="stream-url" style="margin-bottom:0;">Live Stream URL (Kept until updated)</label>
-      <span id="link-save-badge" class="muted" style="font-size:10px; color:#11583e; display:none;">✓ Saved</span>
+      <span id="link-save-badge" class="muted" style="font-size:10px; color:var(--mint-ink); display:none;">✓ Saved</span>
     </div>
     <input type="url" id="stream-url" placeholder="https://www.youtube.com/watch?v=..." style="margin-top:4px;">
     <div style="display:flex; gap:6px; margin-top:6px;">

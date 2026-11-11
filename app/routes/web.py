@@ -139,23 +139,30 @@ async def home(
     db_error = getattr(request.app.state, "db_error", None)
     if db_error:
         return HTMLResponse(
-            f"""<!DOCTYPE html><html><head><meta charset="utf-8"><title>Comment Bot — Database Setup</title></head>
-            <body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;padding:2rem;max-width:720px;margin:0 auto;line-height:1.6;background:#f6f4fb;color:#252236;">
-            <h1 style="color:#473187;margin-bottom:0.5rem;">Database Connection Notice</h1>
-            <p style="color:#5b5570;">The database is currently unreachable. If your free Render PostgreSQL database expired (Render free databases expire after 30 days), you do <b>not</b> need to pay for premium!</p>
-            <div style="background:#ffe7dc;border:1px solid #f8bea4;border-radius:10px;padding:1rem;margin:1rem 0;">
-                <b style="color:#7d3b22;">Error details:</b>
-                <pre style="background:#ffffff;border:1px solid rgba(114,99,158,0.16);padding:0.75rem;border-radius:6px;overflow:auto;font-size:0.875rem;margin-top:0.5rem;color:#7d3b22;">{db_error}</pre>
+            f"""<!DOCTYPE html><html><head><meta charset="utf-8"><title>Comment Bot — Database Setup</title>
+            <style>
+              :root {{ --bg:#f6f4fb; --fg:#252236; --muted:#5b5570; --h1:#473187; --box:#ffe7dc; --border:#f8bea4; --ink:#7d3b22; --pre:#ffffff; --pre-border:rgba(114,99,158,0.16); }}
+              @media (prefers-color-scheme: dark) {{
+                :root {{ --bg:#13111c; --fg:#f2effa; --muted:#b9b2cf; --h1:#d5c8ff; --box:rgba(248,176,148,0.16); --border:rgba(248,190,164,0.38); --ink:#ffc7b2; --pre:#1b1828; --pre-border:rgba(197,180,252,0.22); }}
+              }}
+              body {{ font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; padding:2rem; max-width:720px; margin:0 auto; line-height:1.6; background:var(--bg); color:var(--fg); }}
+            </style></head>
+            <body>
+            <h1 style="color:var(--h1);margin-bottom:0.5rem;">Database Connection Notice</h1>
+            <p style="color:var(--muted);">The database is currently unreachable. If your free Render PostgreSQL database expired (Render free databases expire after 30 days), you do <b>not</b> need to pay for premium!</p>
+            <div style="background:var(--box);border:1px solid var(--border);border-radius:10px;padding:1rem;margin:1rem 0;">
+                <b style="color:var(--ink);">Error details:</b>
+                <pre style="background:var(--pre);border:1px solid var(--pre-border);padding:0.75rem;border-radius:6px;overflow:auto;font-size:0.875rem;margin-top:0.5rem;color:var(--ink);">{db_error}</pre>
             </div>
             <h3>How to fix this for FREE:</h3>
-            <ol style="padding-left:1.25rem;color:#5b5570;">
+            <ol style="padding-left:1.25rem;color:var(--muted);">
                 <li style="margin-bottom:0.75rem;">
-                    <b style="color:#252236;">Option 1: Free permanent cloud Postgres (Recommended)</b><br>
-                    Create a free Postgres database on <a href="https://neon.tech" target="_blank" style="color:#473187;font-weight:600;">Neon.tech</a> (free forever, 0.5 GB, 30s setup, no credit card required).<br>
+                    <b style="color:var(--fg);">Option 1: Free permanent cloud Postgres (Recommended)</b><br>
+                    Create a free Postgres database on <a href="https://neon.tech" target="_blank" style="color:var(--h1);font-weight:600;">Neon.tech</a> (free forever, 0.5 GB, 30s setup, no credit card required).<br>
                     Copy the connection string, go to your Render Web Service &rarr; <b>Environment</b> &rarr; set <code>DATABASE_URL</code> to the Neon URL &rarr; Save Changes.
                 </li>
                 <li style="margin-bottom:0.75rem;">
-                    <b style="color:#252236;">Option 2: Local SQLite</b><br>
+                    <b style="color:var(--fg);">Option 2: Local SQLite</b><br>
                     In your Render Web Service &rarr; <b>Environment</b> &rarr; remove <code>DATABASE_URL</code> or set it to <code>sqlite+aiosqlite:///./comment_bot.db</code> &rarr; Save Changes.
                 </li>
             </ol>

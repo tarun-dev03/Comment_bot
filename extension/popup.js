@@ -16,6 +16,34 @@ const ytDot = document.getElementById("yt-dot");
 const ytText = document.getElementById("yt-text");
 const ytSubtext = document.getElementById("yt-subtext");
 const badgeStatus = document.getElementById("badge-status");
+const btnTheme = document.getElementById("btn-theme");
+
+function applyPopupTheme(theme) {
+  const active = theme === "dark" ? "dark" : "light";
+  document.documentElement.setAttribute("data-theme", active);
+  if (btnTheme) {
+    btnTheme.textContent = active === "dark" ? "☀️" : "🌙";
+    btnTheme.title = active === "dark" ? "Switch to Light Pastel theme" : "Switch to Dark Pastel theme";
+  }
+}
+
+function initPopupTheme() {
+  const osDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+  chrome.storage.local.get({ theme: "" }, (res) => {
+    const saved = res && (res.theme === "dark" || res.theme === "light") ? res.theme : "";
+    applyPopupTheme(saved || (osDark ? "dark" : "light"));
+  });
+  if (btnTheme) {
+    btnTheme.addEventListener("click", () => {
+      const current = document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
+      const next = current === "dark" ? "light" : "dark";
+      applyPopupTheme(next);
+      chrome.storage.local.set({ theme: next });
+    });
+  }
+}
+
+initPopupTheme();
 
 function formatTimeAgo(timestamp) {
   if (!timestamp) return "Never synced";
@@ -230,9 +258,7 @@ function detectActiveYouTubeTab() {
       if (tabs && tabs[0] && tabs[0].url) {
         const url = tabs[0].url;
         if (url.includes("youtube.com/watch") || url.includes("youtube.com/live") || url.includes("youtu.be/")) {
-          btnUseTab.style.background = "#dff2ff";
-          btnUseTab.style.borderColor = "#9bd4fa";
-          btnUseTab.style.color = "#17547d";
+          btnUseTab.classList.add("is-youtube");
           btnUseTab.onclick = () => {
             saveStreamUrl(url);
           };
